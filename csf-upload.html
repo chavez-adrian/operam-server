@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Alta de Cliente — pp.peltre</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #f5f5f5;
+    color: #222;
+    min-height: 100vh;
+  }
+  header {
+    background: #1a1a1a;
+    color: #fff;
+    padding: 16px 20px;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+  main { padding: 20px; max-width: 520px; margin: 0 auto; }
+
+  /* Upload zone */
+  .upload-zone {
+    border: 2px dashed #ccc;
+    border-radius: 12px;
+    padding: 40px 20px;
+    text-align: center;
+    background: #fff;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    margin-bottom: 20px;
+  }
+  .upload-zone.dragover { border-color: #1a1a1a; background: #f0f0f0; }
+  .upload-zone input { display: none; }
+  .upload-zone .icon { font-size: 40px; margin-bottom: 12px; }
+  .upload-zone p { color: #666; font-size: 14px; margin-top: 6px; }
+  .upload-zone strong { color: #1a1a1a; font-size: 16px; }
+
+  /* Card */
+  .card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  .card h3 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #888;
+    margin-bottom: 14px;
+  }
+
+  /* Fields */
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 12px; color: #888; margin-bottom: 4px; }
+  .field input, .field textarea {
+    width: 100%;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 15px;
+    font-family: inherit;
+    background: #fafafa;
+    color: #222;
+    transition: border-color 0.15s;
+  }
+  .field input:focus, .field textarea:focus {
+    outline: none;
+    border-color: #1a1a1a;
+    background: #fff;
+  }
+  .field textarea { resize: vertical; min-height: 80px; font-size: 13px; line-height: 1.5; }
+
+  /* Buttons */
+  .btn {
+    display: block;
+    width: 100%;
+    padding: 16px;
+    border: none;
+    border-radius: 10px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  .btn:disabled { opacity: 0.4; cursor: default; }
+  .btn-primary { background: #1a1a1a; color: #fff; }
+  .btn-primary:not(:disabled):hover { opacity: 0.85; }
+  .btn-reset { background: #f0f0f0; color: #555; margin-top: 10px; font-size: 14px; padding: 12px; }
+
+  /* Status */
+  .status {
+    text-align: center;
+    padding: 16px;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 500;
+    margin-bottom: 16px;
+    display: none;
+  }
+  .status.loading { background: #f0f4ff; color: #3366cc; display: block; }
+  .status.ok      { background: #e8f5e9; color: #2e7d32; display: block; }
+  .status.error   { background: #ffeaea; color: #c62828; display: block; }
+  .status.warn    { background: #fff8e1; color: #e65100; display: block; }
+
+  .hidden { display: none; }
+  .spinner { display: inline-block; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<header>pp.peltre — Alta de Cliente</header>
+<main>
+
+  <!-- Upload -->
+  <div class="upload-zone" id="uploadZone">
+    <input type="file" id="pdfInput" accept="application/pdf">
+    <div class="icon">📄</div>
+    <strong>Subir Constancia de Situación Fiscal</strong>
+    <p>Toca aquí o arrastra el PDF</p>
+  </div>
+
+  <!-- Status -->
+  <div class="status" id="status"></div>
+
+  <!-- Form (hidden until PDF parsed) -->
+  <div id="formSection" class="hidden">
+
+    <div class="card">
+      <h3>Datos del contribuyente</h3>
+      <div class="field"><label>Nombre completo</label><input id="f_CustName" type="text"></div>
+      <div class="field"><label>Nombre corto (en Operam)</label><input id="f_cust_ref" type="text"></div>
+      <div class="field"><label>RFC</label><input id="f_tax_id" type="text"></div>
+      <div class="field"><label>SAT IdCIF</label><input id="f_idcif" type="text"></div>
+    </div>
+
+    <div class="card">
+      <h3>Domicilio fiscal</h3>
+      <div class="field"><label>Calle</label><input id="f_street" type="text"></div>
+      <div class="field"><label>Número exterior</label><input id="f_street_number" type="text"></div>
+      <div class="field"><label>Número interior</label><input id="f_suite_number" type="text"></div>
+      <div class="field"><label>Colonia</label><input id="f_district" type="text"></div>
+      <div class="field"><label>Código postal</label><input id="f_postal_code" type="text" inputmode="numeric"></div>
+      <div class="field"><label>Ciudad / Municipio</label><input id="f_city" type="text"></div>
+      <div class="field"><label>Estado</label><input id="f_state" type="text"></div>
+    </div>
+
+    <div class="card">
+      <h3>Fiscal</h3>
+      <div class="field"><label>Régimen fiscal</label><input id="f_regimen_text" type="text" readonly style="color:#888;font-size:13px"></div>
+      <div class="field"><label>Código régimen SAT</label><input id="f_cfdi_regimen_fiscal" type="text"></div>
+    </div>
+
+    <div class="card">
+      <h3>Actividades y notas</h3>
+      <div class="field"><label>Notas (se copian a Operam)</label><textarea id="f_notes"></textarea></div>
+      <div class="field"><label>Fecha CSF</label><input id="f_csf_fecha" type="text"></div>
+    </div>
+
+    <div class="field"><label>Teléfono (opcional)</label><input id="f_phone" type="tel" inputmode="tel"></div>
+    <div class="field"><label>Email (opcional)</label><input id="f_email" type="email" inputmode="email"></div>
+
+    <button class="btn btn-primary" id="btnCrear" onclick="crearCliente()">
+      Crear cliente en Operam
+    </button>
+    <button class="btn btn-reset" onclick="resetForm()">Subir otra CSF</button>
+  </div>
+
+</main>
+
+<!-- PDF.js desde CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+// ─── Config ──────────────────────────────────────────────────────────────────
+const API_URL = 'https://TU-BACKEND.onrender.com/api/crear-cliente'; // ← reemplazar tras deploy
+
+// ─── Mapa de regímenes ────────────────────────────────────────────────────────
+const REGIMENES = {
+  'General de Ley Personas Morales':                                   '601',
+  'Personas Morales con Fines no Lucrativos':                          '603',
+  'Sueldos y Salarios e Ingresos Asimilados a Salarios':               '605',
+  'Arrendamiento':                                                      '606',
+  'Enajenación o Adquisición de Bienes':                               '607',
+  'Demás ingresos':                                                     '608',
+  'Residentes en el Extranjero sin Establecimiento Permanente':         '610',
+  'Ingresos por Dividendos':                                            '611',
+  'Personas Físicas con Actividades Empresariales y Profesionales':     '612',
+  'Ingresos por intereses':                                             '614',
+  'Sin obligaciones fiscales':                                          '616',
+  'Incorporación Fiscal':                                               '621',
+  'Actividades Agrícolas, Ganaderas, Silvícolas y Pesqueras':           '622',
+  'Plataformas Tecnológicas':                                           '625',
+  'Régimen Simplificado de Confianza':                                  '626',
+};
+
+function detectarRegimen(texto) {
+  for (const [clave, codigo] of Object.entries(REGIMENES)) {
+    if (texto.includes(clave)) return { texto: clave, codigo };
+  }
+  return { texto: '', codigo: '612' };
+}
+
+// ─── Parser de CSF ────────────────────────────────────────────────────────────
+function parsearCSF(texto) {
+  const get = (pattern, group = 1) => {
+    const m = texto.match(pattern);
+    return m ? m[group].trim() : '';
+  };
+
+  const nombre_s         = get(/Nombre\s*\(s\)\s*:\s*([A-ZÁÉÍÓÚÑ ]+?)(?:\n|Primer)/i);
+  const primer_apellido  = get(/Primer Apellido\s*:\s*([A-ZÁÉÍÓÚÑ]+)/i);
+  const segundo_apellido = get(/Segundo Apellido\s*:\s*([A-ZÁÉÍÓÚÑ]+)/i);
+  const rfc              = get(/RFC\s*:\s*([A-Z0-9]{12,13})/i);
+  const idcif            = get(/idCIF\s*:\s*(\d+)/i);
+  const cp               = get(/Código Postal\s*:?\s*(\d{5})/i);
+  const vialidad         = get(/Nombre de Vialidad\s*:\s*([A-ZÁÉÍÓÚÑ0-9 ]+?)(?:\n|Número)/i);
+  const num_ext          = get(/Número Exterior\s*:\s*([^\n]+?)(?:\n|Número)/i);
+  const num_int          = get(/Número Interior\s*:\s*([^\n]*?)(?:\n|Nombre)/i);
+  const colonia          = get(/Nombre de la Colonia\s*:\s*([A-ZÁÉÍÓÚÑ0-9 ]+?)(?:\n|Nombre)/i);
+  const municipio        = get(/Nombre del Municipio[^:]*:\s*([A-ZÁÉÍÓÚÑ0-9 ]+?)(?:\n|Nombre)/i);
+  const estado           = get(/Nombre de la Entidad Federativa\s*:\s*([A-ZÁÉÍÓÚÑ]+)/i);
+
+  // Fecha de emisión (ej: "A 02 DE ENERO DE 2026" o "A 15 DE MARZO DE 2025")
+  const MESES = {enero:'01',febrero:'02',marzo:'03',abril:'04',mayo:'05',junio:'06',
+                 julio:'07',agosto:'08',septiembre:'09',octubre:'10',noviembre:'11',diciembre:'12'};
+  let csf_fecha = '';
+  const mFecha = texto.match(/A\s+(\d{1,2})\s+DE\s+([A-ZÁÉÍÓÚÑ]+)\s+DE\s+(\d{4})/i);
+  if (mFecha) {
+    const mes = MESES[mFecha[2].toLowerCase()] || '01';
+    csf_fecha = `${mFecha[3]}-${mes}-${mFecha[1].padStart(2,'0')}`;
+  }
+
+  // Actividades económicas
+  const actividades = [];
+  const actRegex = /(\d+)\s+([A-ZÁÉÍÓÚÑ][^\n]+?)\s+(\d+)\s+(\d{2}\/\d{2}\/\d{4})/g;
+  let mAct;
+  while ((mAct = actRegex.exec(texto)) !== null) {
+    const desc = mAct[2].trim();
+    const pct  = mAct[3];
+    if (!actividades.some(a => a.includes(desc))) {
+      actividades.push(`${desc} (${pct}%)`);
+    }
+  }
+
+  // Régimen fiscal principal (el primero que aparezca)
+  const { texto: regTexto, codigo: regCodigo } = detectarRegimen(texto);
+
+  // Nombre corto: Nombre + Primer Apellido en Title Case
+  const toTC = s => s.toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
+  const CustName = [nombre_s, primer_apellido, segundo_apellido].filter(Boolean).join(' ');
+  const cust_ref = toTC(`${nombre_s} ${primer_apellido}`);
+
+  const notes = actividades.length
+    ? `Actividades económicas (CSF ${csf_fecha}):\n` + actividades.map(a => `- ${a}`).join('\n')
+    : '';
+
+  return {
+    CustName, cust_ref,
+    nombre_s, primer_apellido, segundo_apellido,
+    tax_id:   rfc,
+    idcif,
+    street:        vialidad,
+    street_number: num_ext,
+    suite_number:  num_int,
+    district:      colonia,
+    postal_code:   cp,
+    city:          municipio,
+    state:         estado,
+    country:       'México',
+    cfdi_regimen_fiscal: regCodigo,
+    regimen_text:  regTexto,
+    actividades,
+    csf_fecha,
+    notes,
+    phone: '',
+    email: '',
+  };
+}
+
+// ─── Leer PDF ─────────────────────────────────────────────────────────────────
+async function leerPDF(file) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+  const buffer    = await file.arrayBuffer();
+  const pdf       = await pdfjsLib.getDocument({ data: buffer }).promise;
+  let textoTotal  = '';
+
+  for (let i = 1; i <= Math.min(pdf.numPages, 2); i++) {
+    const page    = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    textoTotal   += content.items.map(item => item.str).join(' ') + '\n';
+  }
+
+  return textoTotal;
+}
+
+// ─── Poblar formulario ────────────────────────────────────────────────────────
+function poblarForm(data) {
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
+  set('f_CustName',            data.CustName);
+  set('f_cust_ref',            data.cust_ref);
+  set('f_tax_id',              data.tax_id);
+  set('f_idcif',               data.idcif);
+  set('f_street',              data.street);
+  set('f_street_number',       data.street_number);
+  set('f_suite_number',        data.suite_number);
+  set('f_district',            data.district);
+  set('f_postal_code',         data.postal_code);
+  set('f_city',                data.city);
+  set('f_state',               data.state);
+  set('f_regimen_text',        data.regimen_text);
+  set('f_cfdi_regimen_fiscal', data.cfdi_regimen_fiscal);
+  set('f_notes',               data.notes);
+  set('f_csf_fecha',           data.csf_fecha);
+  set('f_phone',               data.phone);
+  set('f_email',               data.email);
+}
+
+// ─── Leer formulario ──────────────────────────────────────────────────────────
+function leerForm() {
+  const get = id => document.getElementById(id)?.value?.trim() || '';
+  const notasRaw = get('f_notes');
+  // Extraer actividades del textarea
+  const actividades = notasRaw
+    .split('\n')
+    .filter(l => l.startsWith('- '))
+    .map(l => l.slice(2));
+
+  return {
+    nombre_s:          get('f_CustName').split(' ')[0],
+    primer_apellido:   get('f_CustName').split(' ')[1] || '',
+    segundo_apellido:  get('f_CustName').split(' ').slice(2).join(' '),
+    tax_id:            get('f_tax_id'),
+    idcif:             get('f_idcif'),
+    street:            get('f_street'),
+    street_number:     get('f_street_number'),
+    suite_number:      get('f_suite_number'),
+    district:          get('f_district'),
+    postal_code:       get('f_postal_code'),
+    city:              get('f_city'),
+    state:             get('f_state'),
+    country:           'México',
+    cfdi_regimen_fiscal: get('f_cfdi_regimen_fiscal'),
+    actividades,
+    csf_fecha:         get('f_csf_fecha'),
+    phone:             get('f_phone'),
+    email:             get('f_email'),
+  };
+}
+
+// ─── Mostrar status ───────────────────────────────────────────────────────────
+function setStatus(tipo, msg) {
+  const el = document.getElementById('status');
+  el.className = `status ${tipo}`;
+  el.textContent = msg;
+}
+
+// ─── Eventos ──────────────────────────────────────────────────────────────────
+const uploadZone = document.getElementById('uploadZone');
+const pdfInput   = document.getElementById('pdfInput');
+
+uploadZone.addEventListener('click', () => pdfInput.click());
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadZone.classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (file?.type === 'application/pdf') procesarPDF(file);
+});
+pdfInput.addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (file) procesarPDF(file);
+});
+
+async function procesarPDF(file) {
+  setStatus('loading', '⏳ Leyendo PDF...');
+  uploadZone.style.display = 'none';
+  try {
+    const texto = await leerPDF(file);
+    const data  = parsearCSF(texto);
+    poblarForm(data);
+    document.getElementById('formSection').classList.remove('hidden');
+    setStatus('', '');
+    document.getElementById('status').style.display = 'none';
+    if (!data.tax_id) {
+      setStatus('error', 'No se pudo extraer el RFC. Verifica los campos manualmente.');
+    }
+  } catch (err) {
+    setStatus('error', `Error al leer el PDF: ${err.message}`);
+    uploadZone.style.display = '';
+  }
+}
+
+async function crearCliente() {
+  const datos = leerForm();
+  if (!datos.tax_id) {
+    setStatus('error', 'El RFC es obligatorio.');
+    return;
+  }
+
+  const btn = document.getElementById('btnCrear');
+  btn.disabled = true;
+  btn.textContent = '⏳ Creando...';
+  setStatus('loading', 'Conectando con Operam...');
+
+  try {
+    const resp = await fetch(API_URL, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(datos),
+    });
+    const result = await resp.json();
+
+    if (!resp.ok || result.error) {
+      setStatus('error', `Error: ${result.error || 'Error desconocido'}`);
+    } else if (result.duplicado) {
+      setStatus('warn', `El RFC ${datos.tax_id} ya está registrado en Operam (${result.nombre}). No se realizó ningún cambio.`);
+    } else {
+      setStatus('ok', `Cliente creado. ${result.nombre} — ID: ${result.cliente_id ?? '—'}`);
+    }
+  } catch (err) {
+    setStatus('error', `No se pudo conectar con el servidor: ${err.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Crear cliente en Operam';
+  }
+}
+
+function resetForm() {
+  pdfInput.value = '';
+  document.getElementById('formSection').classList.add('hidden');
+  document.getElementById('status').style.display = 'none';
+  uploadZone.style.display = '';
+}
+</script>
+</body>
+</html>
