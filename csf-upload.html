@@ -178,7 +178,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
 // ─── Config ──────────────────────────────────────────────────────────────────
-const API_URL = 'https://TU-BACKEND.onrender.com/api/crear-cliente'; // ← reemplazar tras deploy
+const API_URL = 'https://operam-server.onrender.com/api/crear-cliente';
 
 // ─── Mapa de regímenes ────────────────────────────────────────────────────────
 const REGIMENES = {
@@ -199,11 +199,17 @@ const REGIMENES = {
   'Régimen Simplificado de Confianza':                                  '626',
 };
 
+// Prioridad: cuando hay múltiples regímenes en la CSF, se usa el de mayor prioridad
+const PRIORIDAD = ['601','603','612','621','626','606','622','607','608','605','614','611','610','616','625'];
+
 function detectarRegimen(texto) {
+  const encontrados = [];
   for (const [clave, codigo] of Object.entries(REGIMENES)) {
-    if (texto.includes(clave)) return { texto: clave, codigo };
+    if (texto.includes(clave)) encontrados.push({ texto: clave, codigo });
   }
-  return { texto: '', codigo: '612' };
+  if (encontrados.length === 0) return { texto: '', codigo: '612' };
+  encontrados.sort((a, b) => PRIORIDAD.indexOf(a.codigo) - PRIORIDAD.indexOf(b.codigo));
+  return encontrados[0];
 }
 
 // ─── Parser de CSF ────────────────────────────────────────────────────────────

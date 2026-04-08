@@ -50,11 +50,16 @@ const REGIMENES = {
   'Régimen Simplificado de Confianza':                                    '626',
 };
 
+const PRIORIDAD = ['601','603','612','621','626','606','622','607','608','605','614','611','610','616','625'];
+
 function detectarRegimen(textoRegimen) {
+  const encontrados = [];
   for (const [clave, codigo] of Object.entries(REGIMENES)) {
-    if (textoRegimen.includes(clave)) return codigo;
+    if (textoRegimen.includes(clave)) encontrados.push(codigo);
   }
-  return '612'; // fallback
+  if (encontrados.length === 0) return '612';
+  encontrados.sort((a, b) => PRIORIDAD.indexOf(a) - PRIORIDAD.indexOf(b));
+  return encontrados[0];
 }
 
 function toTitleCase(s) {
