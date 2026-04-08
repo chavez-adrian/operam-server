@@ -84,11 +84,8 @@ async function crearClienteEnOperam(cliente) {
   const CustName = [cliente.nombre_s, cliente.primer_apellido, cliente.segundo_apellido]
     .filter(Boolean).join(' ');
   const cust_ref = toTitleCase(`${cliente.nombre_s} ${cliente.primer_apellido}`);
-  const notesBase = `Actividades económicas (CSF ${cliente.csf_fecha}):\n` +
+  const notes = `Actividades económicas (CSF ${cliente.csf_fecha}):\n` +
     (cliente.actividades || []).map(a => `- ${a}`).join('\n');
-  const notes = cliente.vendedor
-    ? `${notesBase}\nVendedor: ${cliente.vendedor}`
-    : notesBase;
 
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext();
@@ -131,6 +128,8 @@ async function crearClienteEnOperam(cliente) {
         fd.set('country',             cliente.country || 'México');
         fd.set('phone',               cliente.phone || '');
         fd.set('email',               cliente.email || '');
+        fd.set('salesman',            cliente.salesman || '');
+        fd.set('segmento_id',         cliente.segmento_id || '');
         fd.set('cfdi_regimen_fiscal', cliente.cfdi_regimen_fiscal || '612');
         fd.set('notes',               notes);
         fd.set('cfdi_form_payment',   defaults.cfdi_form_payment);

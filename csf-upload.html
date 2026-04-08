@@ -58,7 +58,7 @@
   /* Fields */
   .field { margin-bottom: 14px; }
   .field label { display: block; font-size: 12px; color: #888; margin-bottom: 4px; }
-  .field input, .field textarea {
+  .field input, .field textarea, .field select {
     width: 100%;
     border: 1px solid #e0e0e0;
     border-radius: 8px;
@@ -69,7 +69,15 @@
     color: #222;
     transition: border-color 0.15s;
   }
-  .field input:focus, .field textarea:focus {
+  .field select {
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23888' d='M6 8L0 0h12z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 32px;
+  }
+  .field input:focus, .field textarea:focus, .field select:focus {
     outline: none;
     border-color: #1a1a1a;
     background: #fff;
@@ -208,7 +216,37 @@
         </div>
       </div>
       <div class="field"><label>Email</label><input id="f_email" type="email" inputmode="email"></div>
-      <div class="field"><label>Vendedor</label><input id="f_vendedor" type="text" placeholder="Nombre del vendedor"></div>
+      <div class="field">
+        <label>Vendedor</label>
+        <select id="f_salesman">
+          <option value="">— Seleccionar —</option>
+          <option value="1">Adrián Chávez</option>
+          <option value="9">Alejandro Castañón</option>
+          <option value="2">Alejandro Chávez</option>
+          <option value="6">Amazon</option>
+          <option value="5">Mercado Libre</option>
+          <option value="7">Mostrador</option>
+          <option value="8">Oswaldo Chávez</option>
+          <option value="3">Shopify</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Segmento de cliente</label>
+        <select id="f_segmento_id">
+          <option value="">— Seleccionar —</option>
+          <option value="1">000 - Sin segmento</option>
+          <option value="14">100 - Distribuidores</option>
+          <option value="8">200 - Menudistas</option>
+          <option value="10">300 - Restaurantes, hoteles</option>
+          <option value="12">400 - Agencias | Marcas</option>
+          <option value="11">500 - e-commerce</option>
+          <option value="15">600 - Eventos</option>
+          <option value="16">700 - Consumidor final</option>
+          <option value="13">800 - Empleados</option>
+          <option value="9">900 - Familia y Amigos</option>
+          <option value="17">1000 - Maquila</option>
+        </select>
+      </div>
     </div>
 
     <button class="btn btn-primary" id="btnCrear" onclick="crearCliente()">
@@ -405,7 +443,8 @@ function leerForm() {
       return number ? `${code} ${number}` : '';
     })(),
     email:             get('f_email'),
-    vendedor:          get('f_vendedor'),
+    salesman:          get('f_salesman'),
+    segmento_id:       get('f_segmento_id'),
   };
 }
 
