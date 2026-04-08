@@ -84,8 +84,11 @@ async function crearClienteEnOperam(cliente) {
   const CustName = [cliente.nombre_s, cliente.primer_apellido, cliente.segundo_apellido]
     .filter(Boolean).join(' ');
   const cust_ref = toTitleCase(`${cliente.nombre_s} ${cliente.primer_apellido}`);
-  const notes    = `Actividades económicas (CSF ${cliente.csf_fecha}):\n` +
+  const notesBase = `Actividades económicas (CSF ${cliente.csf_fecha}):\n` +
     (cliente.actividades || []).map(a => `- ${a}`).join('\n');
+  const notes = cliente.vendedor
+    ? `${notesBase}\nVendedor: ${cliente.vendedor}`
+    : notesBase;
 
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext();

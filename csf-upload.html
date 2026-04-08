@@ -111,6 +111,25 @@
   .hidden { display: none; }
   .spinner { display: inline-block; animation: spin 1s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
+
+  .phone-row { display: flex; gap: 8px; }
+  .phone-row select {
+    flex: 0 0 auto;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 10px 8px;
+    font-size: 14px;
+    font-family: inherit;
+    background: #fafafa;
+    color: #222;
+    -webkit-appearance: none;
+    appearance: none;
+    padding-right: 24px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23888' d='M6 8L0 0h12z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+  }
+  .phone-row input { flex: 1; }
 </style>
 </head>
 <body>
@@ -163,8 +182,34 @@
       <div class="field"><label>Fecha CSF</label><input id="f_csf_fecha" type="text"></div>
     </div>
 
-    <div class="field"><label>Teléfono (opcional)</label><input id="f_phone" type="tel" inputmode="tel"></div>
-    <div class="field"><label>Email (opcional)</label><input id="f_email" type="email" inputmode="email"></div>
+    <div class="card">
+      <h3>Contacto y vendedor</h3>
+      <div class="field">
+        <label>Celular (opcional)</label>
+        <div class="phone-row">
+          <select id="f_phone_code">
+            <option value="+1">EUA +1</option>
+            <option value="+52" selected>MX +52</option>
+            <option value="+49">Alemania +49</option>
+            <option value="+54">Argentina +54</option>
+            <option value="+55">Brasil +55</option>
+            <option value="+1">Canadá +1</option>
+            <option value="+56">Chile +56</option>
+            <option value="+57">Colombia +57</option>
+            <option value="+34">España +34</option>
+            <option value="+33">Francia +33</option>
+            <option value="+502">Guatemala +502</option>
+            <option value="+39">Italia +39</option>
+            <option value="+51">Perú +51</option>
+            <option value="+44">Reino Unido +44</option>
+            <option value="+58">Venezuela +58</option>
+          </select>
+          <input id="f_phone_number" type="tel" inputmode="tel" placeholder="55 1234 5678">
+        </div>
+      </div>
+      <div class="field"><label>Email</label><input id="f_email" type="email" inputmode="email"></div>
+      <div class="field"><label>Vendedor</label><input id="f_vendedor" type="text" placeholder="Nombre del vendedor"></div>
+    </div>
 
     <button class="btn btn-primary" id="btnCrear" onclick="crearCliente()">
       Crear cliente en Operam
@@ -325,8 +370,6 @@ function poblarForm(data) {
   set('f_cfdi_regimen_fiscal', data.cfdi_regimen_fiscal);
   set('f_notes',               data.notes);
   set('f_csf_fecha',           data.csf_fecha);
-  set('f_phone',               data.phone);
-  set('f_email',               data.email);
 }
 
 // ─── Leer formulario ──────────────────────────────────────────────────────────
@@ -356,8 +399,13 @@ function leerForm() {
     cfdi_regimen_fiscal: get('f_cfdi_regimen_fiscal'),
     actividades,
     csf_fecha:         get('f_csf_fecha'),
-    phone:             get('f_phone'),
+    phone:             (() => {
+      const code   = document.getElementById('f_phone_code')?.value || '+52';
+      const number = get('f_phone_number');
+      return number ? `${code} ${number}` : '';
+    })(),
     email:             get('f_email'),
+    vendedor:          get('f_vendedor'),
   };
 }
 
