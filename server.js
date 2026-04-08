@@ -133,7 +133,7 @@ async function crearClienteEnOperam(cliente) {
         fd.set('cfdi_regimen_fiscal', cliente.cfdi_regimen_fiscal || '612');
         fd.set('notes',               notes);
         fd.set('cfdi_form_payment',   defaults.cfdi_form_payment);
-        fd.set('timbrado_uso_cfdi',   defaults.timbrado_uso_cfdi);
+        fd.set('timbrado_uso_cfdi',   cliente.timbrado_uso_cfdi || defaults.timbrado_uso_cfdi);
         fd.set('payment_terms',       defaults.payment_terms);
         fd.set('location',            defaults.location);
         fd.set('area',                defaults.area);
