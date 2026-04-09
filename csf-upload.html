@@ -335,7 +335,7 @@ function parsearCSF(texto) {
   const esMoral = /Denominaci[oó]n\/Raz[oó]n Social/i.test(texto);
   let nombre_s, primer_apellido, segundo_apellido;
   if (esMoral) {
-    nombre_s         = get(/Denominaci[oó]n\/Raz[oó]n Social\s*:\s*([^\n]+)/i);
+    nombre_s         = get(/Denominaci[oó]n\/Raz[oó]n Social\s*:\s*(.+?)(?=\s*R[eé]gimen Capital\s*:|\s*Nombre Comercial\s*:|\n|$)/i);
     primer_apellido  = '';
     segundo_apellido = '';
   } else {
