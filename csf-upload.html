@@ -351,7 +351,7 @@ function parsearCSF(texto) {
   const num_int          = get(/Número Interior\s*:\s*([^\n]*?)(?:\n|Nombre)/i);
   const colonia          = get(/Nombre de la Colonia\s*:\s*([A-ZÁÉÍÓÚÑ0-9 ]+?)(?:\n|Nombre)/i);
   const municipio        = get(/Nombre del Municipio[^:]*:\s*([A-ZÁÉÍÓÚÑ0-9 ]+?)(?:\n|Nombre)/i);
-  const estado           = get(/Nombre de la Entidad Federativa\s*:\s*([A-ZÁÉÍÓÚÑ]+)/i);
+  const estado           = get(/Nombre de la Entidad Federativa\s*:\s*([A-ZÁÉÍÓÚÑ0-9 ]+?)(?:\s*Entre Calle|\s*Y Calle|\n|$)/i);
 
   // Fecha de emisión (ej: "A 02 DE ENERO DE 2026" o "A 15 DE MARZO DE 2025")
   const MESES = {enero:'01',febrero:'02',marzo:'03',abril:'04',mayo:'05',junio:'06',
