@@ -91,86 +91,84 @@ async function crearClienteEnOperam(cliente) {
   const page    = await context.newPage();
 
   try {
-    console.log(`[operam] Iniciando creación de cliente RFC: ${cliente.tax_id}`);
+    console.log(`[operam] Iniciando creación RFC: ${cliente.tax_id}`);
     await login(page);
     console.log(`[operam] Login OK`);
 
-    const result = await page.evaluate(
-      async ({ formUrl, postUrl, ajaxUrl, cliente, defaults, CustName, cust_ref, notes }) => {
+    // 1. Verificar si el RFC ya existe — usando context.request (Node.js, no browser eval)
+    const ajaxR1   = await context.request.get(`${AJAX_URL}?inactive=false&term=${encodeURIComponent(cliente.tax_id)}`);
+    const ajaxText1 = await ajaxR1.text();
+    console.log(`[operam] AJAX status: ${ajaxR1.status()} body: ${ajaxText1.slice(0, 200)}`);
 
-        // Helper para fetch JSON seguro
-        async function fetchJSON(url) {
-          const r = await fetch(url, { credentials: 'include' });
-          const text = await r.text();
-          if (!text) return { _empty: true, status: r.status };
-          try { return JSON.parse(text); } catch(e) { return { _parseError: text.slice(0, 200), status: r.status }; }
-        }
+    let ajaxData1;
+    try { ajaxData1 = JSON.parse(ajaxText1); }
+    catch(e) { return { error: `Sesión inválida (${ajaxR1.status()}): ${ajaxText1.slice(0, 150)}` }; }
 
-        // 1. Verificar si el RFC ya existe ANTES de intentar crear
-        const ajaxData = await fetchJSON(`${ajaxUrl}?inactive=false&term=${encodeURIComponent(cliente.tax_id)}`);
-        if (ajaxData._empty || ajaxData._parseError) {
-          return { error: `Sesión no válida en Operam. Status: ${ajaxData.status}. ${ajaxData._parseError || 'Respuesta vacía'}` };
-        }
-        const existente = ajaxData.results?.find(x => x.rfc === cliente.tax_id);
+    const existente = ajaxData1.results?.find(x => x.rfc === cliente.tax_id);
+    if (existente) return { duplicado: true, cliente_id: existente.id, nombre: existente.text };
 
-        if (existente) {
-          return { duplicado: true, cliente_id: existente.id, nombre: existente.text };
-        }
+    // 2. Navegar al formulario y extraer campos existentes vía DOM
+    await page.goto(FORM_URL, { waitUntil: 'domcontentloaded' });
+    const formFields = await page.evaluate(() => {
+      const form = [...document.querySelectorAll('form')].find(f => f.querySelector('[name="CustName"]'));
+      if (!form) return null;
+      const data = {};
+      for (const el of form.elements) {
+        if (el.name && el.type !== 'submit') data[el.name] = el.value;
+      }
+      return data;
+    });
+    if (!formFields) return { error: 'Formulario no encontrado (¿sesión expirada?)' };
+    console.log(`[operam] Formulario cargado OK`);
 
-        // 2. No existe — proceder con el alta
-        const r    = await fetch(formUrl, { credentials: 'include' });
-        const html = await r.text();
-        const doc  = new DOMParser().parseFromString(html, 'text/html');
-        const form = [...doc.querySelectorAll('form')].find(f => f.querySelector('[name="CustName"]'));
-        if (!form) return { error: 'Formulario no encontrado (¿sesión expirada?)' };
+    // 3. POST con context.request (multipart)
+    const multipart = {
+      ...formFields,
+      CustName,
+      cust_ref,
+      tax_id:              cliente.tax_id,
+      idcif:               cliente.idcif               || '',
+      street:              cliente.street               || '',
+      street_number:       cliente.street_number        || '',
+      suite_number:        cliente.suite_number         || '',
+      district:            cliente.district             || '',
+      postal_code:         cliente.postal_code          || '',
+      city:                cliente.city                 || '',
+      state:               cliente.state                || '',
+      country:             cliente.country              || 'México',
+      phone:               cliente.phone                || '',
+      email:               cliente.email                || '',
+      salesman:            cliente.salesman             || '',
+      segmento_id:         cliente.segmento_id          || '',
+      cfdi_regimen_fiscal: cliente.cfdi_regimen_fiscal  || '612',
+      notes,
+      cfdi_form_payment:   DEFAULTS.cfdi_form_payment,
+      timbrado_uso_cfdi:   cliente.timbrado_uso_cfdi    || DEFAULTS.timbrado_uso_cfdi,
+      payment_terms:       DEFAULTS.payment_terms,
+      location:            DEFAULTS.location,
+      area:                DEFAULTS.area,
+      dimension1_id:       DEFAULTS.dimension1_id,
+      dimension2_id:       DEFAULTS.dimension2_id,
+      process:             'Añadir Nuevo Cliente',
+    };
+    // dimensiones_id[] requiere array
+    delete multipart['dimensiones_id[]'];
+    multipart['dimensiones_id[]'] = [DEFAULTS.dimension1_id, DEFAULTS.dimension2_id];
 
-        const fd = new FormData(form);
-        fd.set('CustName',            CustName);
-        fd.set('cust_ref',            cust_ref);
-        fd.set('tax_id',              cliente.tax_id);
-        fd.set('idcif',               cliente.idcif || '');
-        fd.set('street',              cliente.street || '');
-        fd.set('street_number',       cliente.street_number || '');
-        fd.set('suite_number',        cliente.suite_number || '');
-        fd.set('district',            cliente.district || '');
-        fd.set('postal_code',         cliente.postal_code || '');
-        fd.set('city',                cliente.city || '');
-        fd.set('state',               cliente.state || '');
-        fd.set('country',             cliente.country || 'México');
-        fd.set('phone',               cliente.phone || '');
-        fd.set('email',               cliente.email || '');
-        fd.set('salesman',            cliente.salesman || '');
-        fd.set('segmento_id',         cliente.segmento_id || '');
-        fd.set('cfdi_regimen_fiscal', cliente.cfdi_regimen_fiscal || '612');
-        fd.set('notes',               notes);
-        fd.set('cfdi_form_payment',   defaults.cfdi_form_payment);
-        fd.set('timbrado_uso_cfdi',   cliente.timbrado_uso_cfdi || defaults.timbrado_uso_cfdi);
-        fd.set('payment_terms',       defaults.payment_terms);
-        fd.set('location',            defaults.location);
-        fd.set('area',                defaults.area);
-        fd.delete('dimensiones_id[]');
-        fd.append('dimensiones_id[]', defaults.dimension1_id);
-        fd.append('dimensiones_id[]', defaults.dimension2_id);
-        fd.set('dimension1_id',       defaults.dimension1_id);
-        fd.set('dimension2_id',       defaults.dimension2_id);
-        fd.set('process',             'Añadir Nuevo Cliente');
+    const postResp = await context.request.post(POST_URL, { multipart });
+    console.log(`[operam] POST status: ${postResp.status()}`);
 
-        const postResp = await fetch(postUrl, { method: 'POST', credentials: 'include', body: fd });
-        console.log('[operam] POST status:', postResp.status);
+    // 4. Verificar creación
+    await new Promise(r => setTimeout(r, 2000));
+    const ajaxR2    = await context.request.get(`${AJAX_URL}?inactive=false&term=${encodeURIComponent(cliente.tax_id)}`);
+    const ajaxText2 = await ajaxR2.text();
+    let ajaxData2;
+    try { ajaxData2 = JSON.parse(ajaxText2); } catch(e) { ajaxData2 = {}; }
+    const creado = ajaxData2.results?.find(x => x.rfc === cliente.tax_id);
 
-        // 3. Esperar un momento y confirmar que quedó registrado
-        await new Promise(r => setTimeout(r, 2000));
-        const ajaxData2 = await fetchJSON(`${ajaxUrl}?inactive=false&term=${encodeURIComponent(cliente.tax_id)}`);
-        const creado    = ajaxData2.results?.find(x => x.rfc === cliente.tax_id);
+    if (!creado) return { warn: true, mensaje: 'El cliente puede haberse creado. Verifica en Operam buscando el RFC.' };
+    return { duplicado: false, cliente_id: creado.id, nombre: creado.text };
 
-        if (!creado) return { warn: true, mensaje: 'El cliente puede haberse creado. Verifica en Operam buscando el RFC.' };
-
-        return { duplicado: false, cliente_id: creado.id, nombre: creado.text };
-      },
-      { formUrl: FORM_URL, postUrl: POST_URL, ajaxUrl: AJAX_URL, cliente, defaults: DEFAULTS, CustName, cust_ref, notes }
-    );
-
-    return result;
   } finally {
     await browser.close();
   }
