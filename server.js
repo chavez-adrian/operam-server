@@ -102,9 +102,14 @@ async function crearClienteEnOperam(cliente) {
     await login(page);
     console.log(`[operam] Login OK`);
 
-    // 1. Verificar si el RFC ya existe — navegando con el browser (sesión completa)
-    await page.goto(`${AJAX_URL}?inactive=false&term=${encodeURIComponent(cliente.tax_id)}`, { waitUntil: 'domcontentloaded' });
-    const ajaxText1 = await page.evaluate(() => document.body.innerText || document.body.textContent || '');
+    // 1. Verificar si el RFC ya existe — fetch desde el browser con X-Requested-With
+    const ajaxText1 = await page.evaluate(async ({ url }) => {
+      const r = await fetch(url, {
+        credentials: 'include',
+        headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+      });
+      return r.text();
+    }, { url: `${AJAX_URL}?inactive=false&term=${encodeURIComponent(cliente.tax_id)}` });
     console.log(`[operam] AJAX body: ${ajaxText1.slice(0, 300)}`);
 
     let ajaxData1;
@@ -114,61 +119,61 @@ async function crearClienteEnOperam(cliente) {
     const existente = ajaxData1.results?.find(x => x.rfc === cliente.tax_id);
     if (existente) return { duplicado: true, cliente_id: existente.id, nombre: existente.text };
 
-    // 2. Navegar al formulario y extraer campos existentes vía DOM
-    await page.goto(FORM_URL, { waitUntil: 'domcontentloaded' });
-    const formFields = await page.evaluate(() => {
-      const form = [...document.querySelectorAll('form')].find(f => f.querySelector('[name="CustName"]'));
-      if (!form) return null;
-      const data = {};
-      for (const el of form.elements) {
-        if (el.name && el.type !== 'submit') data[el.name] = el.value;
-      }
-      return data;
-    });
-    if (!formFields) return { error: 'Formulario no encontrado (¿sesión expirada?)' };
-    console.log(`[operam] Formulario cargado OK`);
+    // 2. Obtener formulario y hacer POST — todo desde el browser (fetch con credentials)
+    const postStatus = await page.evaluate(async ({ formUrl, postUrl, cliente, defaults, CustName, cust_ref, notes }) => {
+      const r = await fetch(formUrl, { credentials: 'include' });
+      const html = await r.text();
+      const doc  = new DOMParser().parseFromString(html, 'text/html');
+      const form = [...doc.querySelectorAll('form')].find(f => f.querySelector('[name="CustName"]'));
+      if (!form) return { error: 'Formulario no encontrado' };
 
-    // 3. POST con context.request (multipart)
-    const multipart = {
-      ...formFields,
-      CustName,
-      cust_ref,
-      tax_id:              cliente.tax_id,
-      idcif:               cliente.idcif               || '',
-      street:              cliente.street               || '',
-      street_number:       cliente.street_number        || '',
-      suite_number:        cliente.suite_number         || '',
-      district:            cliente.district             || '',
-      postal_code:         cliente.postal_code          || '',
-      city:                cliente.city                 || '',
-      state:               cliente.state                || '',
-      country:             cliente.country              || 'México',
-      phone:               cliente.phone                || '',
-      email:               cliente.email                || '',
-      salesman:            cliente.salesman             || '',
-      segmento_id:         cliente.segmento_id          || '',
-      cfdi_regimen_fiscal: cliente.cfdi_regimen_fiscal  || '612',
-      notes,
-      cfdi_form_payment:   DEFAULTS.cfdi_form_payment,
-      timbrado_uso_cfdi:   cliente.timbrado_uso_cfdi    || DEFAULTS.timbrado_uso_cfdi,
-      payment_terms:       DEFAULTS.payment_terms,
-      location:            DEFAULTS.location,
-      area:                DEFAULTS.area,
-      dimension1_id:       DEFAULTS.dimension1_id,
-      dimension2_id:       DEFAULTS.dimension2_id,
-      process:             'Añadir Nuevo Cliente',
-    };
-    // dimensiones_id[] requiere array
-    delete multipart['dimensiones_id[]'];
-    multipart['dimensiones_id[]'] = [DEFAULTS.dimension1_id, DEFAULTS.dimension2_id];
+      const fd = new FormData(form);
+      fd.set('CustName',            CustName);
+      fd.set('cust_ref',            cust_ref);
+      fd.set('tax_id',              cliente.tax_id);
+      fd.set('idcif',               cliente.idcif               || '');
+      fd.set('street',              cliente.street               || '');
+      fd.set('street_number',       cliente.street_number        || '');
+      fd.set('suite_number',        cliente.suite_number         || '');
+      fd.set('district',            cliente.district             || '');
+      fd.set('postal_code',         cliente.postal_code          || '');
+      fd.set('city',                cliente.city                 || '');
+      fd.set('state',               cliente.state                || '');
+      fd.set('country',             cliente.country              || 'México');
+      fd.set('phone',               cliente.phone                || '');
+      fd.set('email',               cliente.email                || '');
+      fd.set('salesman',            cliente.salesman             || '');
+      fd.set('segmento_id',         cliente.segmento_id          || '');
+      fd.set('cfdi_regimen_fiscal', cliente.cfdi_regimen_fiscal  || '612');
+      fd.set('notes',               notes);
+      fd.set('cfdi_form_payment',   defaults.cfdi_form_payment);
+      fd.set('timbrado_uso_cfdi',   cliente.timbrado_uso_cfdi    || defaults.timbrado_uso_cfdi);
+      fd.set('payment_terms',       defaults.payment_terms);
+      fd.set('location',            defaults.location);
+      fd.set('area',                defaults.area);
+      fd.delete('dimensiones_id[]');
+      fd.append('dimensiones_id[]', defaults.dimension1_id);
+      fd.append('dimensiones_id[]', defaults.dimension2_id);
+      fd.set('dimension1_id',       defaults.dimension1_id);
+      fd.set('dimension2_id',       defaults.dimension2_id);
+      fd.set('process',             'Añadir Nuevo Cliente');
 
-    const postResp = await context.request.post(POST_URL, { multipart });
-    console.log(`[operam] POST status: ${postResp.status()}`);
+      const postResp = await fetch(postUrl, { method: 'POST', credentials: 'include', body: fd });
+      return { status: postResp.status };
+    }, { formUrl: FORM_URL, postUrl: POST_URL, cliente, defaults: DEFAULTS, CustName, cust_ref, notes });
+
+    if (postStatus?.error) return { error: postStatus.error };
+    console.log(`[operam] POST status: ${postStatus?.status}`);
 
     // 4. Verificar creación
     await new Promise(r => setTimeout(r, 2000));
-    await page.goto(`${AJAX_URL}?inactive=false&term=${encodeURIComponent(cliente.tax_id)}`, { waitUntil: 'domcontentloaded' });
-    const ajaxText2 = await page.evaluate(() => document.body.innerText || document.body.textContent || '');
+    const ajaxText2 = await page.evaluate(async ({ url }) => {
+      const r = await fetch(url, {
+        credentials: 'include',
+        headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+      });
+      return r.text();
+    }, { url: `${AJAX_URL}?inactive=false&term=${encodeURIComponent(cliente.tax_id)}` });
     let ajaxData2;
     try { ajaxData2 = JSON.parse(ajaxText2); } catch(e) { ajaxData2 = {}; }
     const creado = ajaxData2.results?.find(x => x.rfc === cliente.tax_id);
