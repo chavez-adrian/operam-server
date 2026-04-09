@@ -69,11 +69,18 @@ function toTitleCase(s) {
 async function login(page) {
   await page.goto(CONFIG.url, { waitUntil: 'domcontentloaded' });
   const esLogin = await page.$('[name="user_name_entry_field"]');
-  if (!esLogin) return;
+  if (!esLogin) {
+    console.log('[operam] Ya logueado, URL:', page.url());
+    return;
+  }
   await page.fill('[name="user_name_entry_field"]', CONFIG.user);
   await page.fill('[name="password"]', CONFIG.password);
   await page.click('button[type="submit"], input[type="submit"]');
   await page.waitForURL(url => !url.href.includes('login') && !url.href.includes('access'), { timeout: 15000 });
+  await page.waitForLoadState('networkidle');
+  console.log('[operam] Post-login URL:', page.url());
+  const cookies = await page.context().cookies();
+  console.log('[operam] Cookies:', cookies.map(c => c.name).join(', '));
 }
 
 async function crearClienteEnOperam(cliente) {
@@ -95,16 +102,14 @@ async function crearClienteEnOperam(cliente) {
     await login(page);
     console.log(`[operam] Login OK`);
 
-    const ajaxHeaders = { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' };
-
-    // 1. Verificar si el RFC ya existe — usando context.request (Node.js, no browser eval)
-    const ajaxR1   = await context.request.get(`${AJAX_URL}?inactive=false&term=${encodeURIComponent(cliente.tax_id)}`, { headers: ajaxHeaders });
-    const ajaxText1 = await ajaxR1.text();
-    console.log(`[operam] AJAX status: ${ajaxR1.status()} body: ${ajaxText1.slice(0, 200)}`);
+    // 1. Verificar si el RFC ya existe — navegando con el browser (sesión completa)
+    await page.goto(`${AJAX_URL}?inactive=false&term=${encodeURIComponent(cliente.tax_id)}`, { waitUntil: 'domcontentloaded' });
+    const ajaxText1 = await page.evaluate(() => document.body.innerText || document.body.textContent || '');
+    console.log(`[operam] AJAX body: ${ajaxText1.slice(0, 300)}`);
 
     let ajaxData1;
     try { ajaxData1 = JSON.parse(ajaxText1); }
-    catch(e) { return { error: `Sesión inválida (${ajaxR1.status()}): ${ajaxText1.slice(0, 150)}` }; }
+    catch(e) { return { error: `Respuesta AJAX no válida: ${ajaxText1.slice(0, 150)}` }; }
 
     const existente = ajaxData1.results?.find(x => x.rfc === cliente.tax_id);
     if (existente) return { duplicado: true, cliente_id: existente.id, nombre: existente.text };
@@ -162,8 +167,8 @@ async function crearClienteEnOperam(cliente) {
 
     // 4. Verificar creación
     await new Promise(r => setTimeout(r, 2000));
-    const ajaxR2    = await context.request.get(`${AJAX_URL}?inactive=false&term=${encodeURIComponent(cliente.tax_id)}`, { headers: ajaxHeaders });
-    const ajaxText2 = await ajaxR2.text();
+    await page.goto(`${AJAX_URL}?inactive=false&term=${encodeURIComponent(cliente.tax_id)}`, { waitUntil: 'domcontentloaded' });
+    const ajaxText2 = await page.evaluate(() => document.body.innerText || document.body.textContent || '');
     let ajaxData2;
     try { ajaxData2 = JSON.parse(ajaxText2); } catch(e) { ajaxData2 = {}; }
     const creado = ajaxData2.results?.find(x => x.rfc === cliente.tax_id);
