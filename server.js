@@ -95,8 +95,10 @@ async function crearClienteEnOperam(cliente) {
     await login(page);
     console.log(`[operam] Login OK`);
 
+    const ajaxHeaders = { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' };
+
     // 1. Verificar si el RFC ya existe — usando context.request (Node.js, no browser eval)
-    const ajaxR1   = await context.request.get(`${AJAX_URL}?inactive=false&term=${encodeURIComponent(cliente.tax_id)}`);
+    const ajaxR1   = await context.request.get(`${AJAX_URL}?inactive=false&term=${encodeURIComponent(cliente.tax_id)}`, { headers: ajaxHeaders });
     const ajaxText1 = await ajaxR1.text();
     console.log(`[operam] AJAX status: ${ajaxR1.status()} body: ${ajaxText1.slice(0, 200)}`);
 
@@ -160,7 +162,7 @@ async function crearClienteEnOperam(cliente) {
 
     // 4. Verificar creación
     await new Promise(r => setTimeout(r, 2000));
-    const ajaxR2    = await context.request.get(`${AJAX_URL}?inactive=false&term=${encodeURIComponent(cliente.tax_id)}`);
+    const ajaxR2    = await context.request.get(`${AJAX_URL}?inactive=false&term=${encodeURIComponent(cliente.tax_id)}`, { headers: ajaxHeaders });
     const ajaxText2 = await ajaxR2.text();
     let ajaxData2;
     try { ajaxData2 = JSON.parse(ajaxText2); } catch(e) { ajaxData2 = {}; }
