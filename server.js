@@ -98,9 +98,19 @@ async function crearClienteEnOperam(cliente) {
     const result = await page.evaluate(
       async ({ formUrl, postUrl, ajaxUrl, cliente, defaults, CustName, cust_ref, notes }) => {
 
+        // Helper para fetch JSON seguro
+        async function fetchJSON(url) {
+          const r = await fetch(url, { credentials: 'include' });
+          const text = await r.text();
+          if (!text) return { _empty: true, status: r.status };
+          try { return JSON.parse(text); } catch(e) { return { _parseError: text.slice(0, 200), status: r.status }; }
+        }
+
         // 1. Verificar si el RFC ya existe ANTES de intentar crear
-        const ajaxR   = await fetch(`${ajaxUrl}?inactive=false&term=${encodeURIComponent(cliente.tax_id)}`, { credentials: 'include' });
-        const ajaxData = await ajaxR.json();
+        const ajaxData = await fetchJSON(`${ajaxUrl}?inactive=false&term=${encodeURIComponent(cliente.tax_id)}`);
+        if (ajaxData._empty || ajaxData._parseError) {
+          return { error: `Sesión no válida en Operam. Status: ${ajaxData.status}. ${ajaxData._parseError || 'Respuesta vacía'}` };
+        }
         const existente = ajaxData.results?.find(x => x.rfc === cliente.tax_id);
 
         if (existente) {
@@ -150,8 +160,7 @@ async function crearClienteEnOperam(cliente) {
 
         // 3. Esperar un momento y confirmar que quedó registrado
         await new Promise(r => setTimeout(r, 2000));
-        const ajaxR2    = await fetch(`${ajaxUrl}?inactive=false&term=${encodeURIComponent(cliente.tax_id)}`, { credentials: 'include' });
-        const ajaxData2 = await ajaxR2.json();
+        const ajaxData2 = await fetchJSON(`${ajaxUrl}?inactive=false&term=${encodeURIComponent(cliente.tax_id)}`);
         const creado    = ajaxData2.results?.find(x => x.rfc === cliente.tax_id);
 
         if (!creado) return { warn: true, mensaje: 'El cliente puede haberse creado. Verifica en Operam buscando el RFC.' };
