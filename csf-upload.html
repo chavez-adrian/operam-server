@@ -331,9 +331,17 @@ function parsearCSF(texto) {
     return m ? m[group].trim() : '';
   };
 
-  const nombre_s         = get(/Nombre\s*\(s\)\s*:\s*([A-ZÁÉÍÓÚÑ ]+?)(?:\n|Primer)/i);
-  const primer_apellido  = get(/Primer Apellido\s*:\s*([A-ZÁÉÍÓÚÑ]+)/i);
-  const segundo_apellido = get(/Segundo Apellido\s*:\s*([A-ZÁÉÍÓÚÑ]+)/i);
+  const esMoral = /Denominaci[oó]n\/Raz[oó]n Social/i.test(texto);
+  let nombre_s, primer_apellido, segundo_apellido;
+  if (esMoral) {
+    nombre_s         = get(/Denominaci[oó]n\/Raz[oó]n Social\s*:\s*([^\n]+)/i);
+    primer_apellido  = '';
+    segundo_apellido = '';
+  } else {
+    nombre_s         = get(/Nombre\s*\(s\)\s*:\s*([A-ZÁÉÍÓÚÑ ]+?)(?:\n|Primer)/i);
+    primer_apellido  = get(/Primer Apellido\s*:\s*([A-ZÁÉÍÓÚÑ]+)/i);
+    segundo_apellido = get(/Segundo Apellido\s*:\s*([A-ZÁÉÍÓÚÑ]+)/i);
+  }
   const rfc              = get(/RFC\s*:\s*([A-Z0-9]{12,13})/i);
   const idcif            = get(/idCIF\s*:\s*(\d+)/i);
   const cp               = get(/Código Postal\s*:?\s*(\d{5})/i);
@@ -369,10 +377,11 @@ function parsearCSF(texto) {
   // Régimen fiscal principal (el primero que aparezca)
   const { texto: regTexto, codigo: regCodigo } = detectarRegimen(texto);
 
-  // Nombre corto: Nombre + Primer Apellido en Title Case
   const toTC = s => s.toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
   const CustName = [nombre_s, primer_apellido, segundo_apellido].filter(Boolean).join(' ');
-  const cust_ref = toTC(`${nombre_s} ${primer_apellido}`);
+  // Persona Moral: cust_ref = razón social en Title Case
+  // Persona Física: cust_ref = Nombre + Primer Apellido en Title Case
+  const cust_ref = esMoral ? toTC(nombre_s) : toTC(`${nombre_s} ${primer_apellido}`);
 
   const notes = actividades.length
     ? `Actividades económicas (CSF ${csf_fecha}):\n` + actividades.map(a => `- ${a}`).join('\n')
