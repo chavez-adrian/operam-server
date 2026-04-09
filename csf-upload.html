@@ -542,13 +542,17 @@ async function crearCliente() {
   const btn = document.getElementById('btnCrear');
   btn.disabled = true;
   btn.textContent = '⏳ Creando...';
-  setStatus('loading', 'Conectando con Operam...');
+  setStatus('loading', 'Conectando con Operam... (puede tardar hasta 60 segundos)');
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 180000); // 3 min
 
   try {
     const resp = await fetch(API_URL, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify(datos),
+      signal:  controller.signal,
     });
     const result = await resp.json();
 
@@ -557,11 +561,16 @@ async function crearCliente() {
     } else if (result.duplicado) {
       setStatus('warn', `El RFC ${datos.tax_id} ya está registrado en Operam (${result.nombre}). No se realizó ningún cambio.`);
     } else {
-      setStatus('ok', `Cliente creado. ${result.nombre} — ID: ${result.cliente_id ?? '—'}`);
+      setStatus('ok', `Cliente creado: ${result.nombre} — ID ${result.cliente_id ?? '—'}`);
     }
   } catch (err) {
-    setStatus('error', `No se pudo conectar con el servidor: ${err.message}`);
+    if (err.name === 'AbortError') {
+      setStatus('error', 'Tiempo de espera agotado. Verifica en Operam si el cliente fue creado.');
+    } else {
+      setStatus('error', `No se pudo conectar con el servidor: ${err.message}`);
+    }
   } finally {
+    clearTimeout(timeout);
     btn.disabled = false;
     btn.textContent = 'Crear cliente en Operam';
   }
