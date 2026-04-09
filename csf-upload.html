@@ -460,9 +460,8 @@ function leerForm() {
     .map(l => l.slice(2));
 
   return {
-    nombre_s:          get('f_CustName').split(' ')[0],
-    primer_apellido:   get('f_CustName').split(' ')[1] || '',
-    segundo_apellido:  get('f_CustName').split(' ').slice(2).join(' '),
+    CustName:          get('f_CustName'),
+    cust_ref:          get('f_cust_ref'),
     tax_id:            get('f_tax_id'),
     idcif:             get('f_idcif'),
     street:            get('f_street'),
@@ -558,6 +557,8 @@ async function crearCliente() {
 
     if (!resp.ok || result.error) {
       setStatus('error', `Error: ${result.error || 'Error desconocido'}`);
+    } else if (result.warn) {
+      setStatus('warn', result.mensaje);
     } else if (result.duplicado) {
       setStatus('warn', `El RFC ${datos.tax_id} ya está registrado en Operam (${result.nombre}). No se realizó ningún cambio.`);
     } else {

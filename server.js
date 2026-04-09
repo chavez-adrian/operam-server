@@ -81,9 +81,8 @@ async function crearClienteEnOperam(cliente) {
   const POST_URL = `${CONFIG.url}/sales/manage/customers.php`;
   const AJAX_URL = `${CONFIG.url}/sales/inquiry/customers.ajax.php`;
 
-  const CustName = [cliente.nombre_s, cliente.primer_apellido, cliente.segundo_apellido]
-    .filter(Boolean).join(' ');
-  const cust_ref = toTitleCase(`${cliente.nombre_s} ${cliente.primer_apellido}`);
+  const CustName = cliente.CustName || '';
+  const cust_ref = cliente.cust_ref || '';
   const notes = `Actividades económicas (CSF ${cliente.csf_fecha}):\n` +
     (cliente.actividades || []).map(a => `- ${a}`).join('\n');
 
@@ -92,7 +91,9 @@ async function crearClienteEnOperam(cliente) {
   const page    = await context.newPage();
 
   try {
+    console.log(`[operam] Iniciando creación de cliente RFC: ${cliente.tax_id}`);
     await login(page);
+    console.log(`[operam] Login OK`);
 
     const result = await page.evaluate(
       async ({ formUrl, postUrl, ajaxUrl, cliente, defaults, CustName, cust_ref, notes }) => {
@@ -144,14 +145,16 @@ async function crearClienteEnOperam(cliente) {
         fd.set('dimension2_id',       defaults.dimension2_id);
         fd.set('process',             'Añadir Nuevo Cliente');
 
-        await fetch(postUrl, { method: 'POST', credentials: 'include', body: fd });
+        const postResp = await fetch(postUrl, { method: 'POST', credentials: 'include', body: fd });
+        console.log('[operam] POST status:', postResp.status);
 
-        // 3. Confirmar que quedó registrado
+        // 3. Esperar un momento y confirmar que quedó registrado
+        await new Promise(r => setTimeout(r, 2000));
         const ajaxR2    = await fetch(`${ajaxUrl}?inactive=false&term=${encodeURIComponent(cliente.tax_id)}`, { credentials: 'include' });
         const ajaxData2 = await ajaxR2.json();
         const creado    = ajaxData2.results?.find(x => x.rfc === cliente.tax_id);
 
-        if (!creado) return { error: 'El POST se ejecutó pero el cliente no aparece en Operam. Verificar manualmente.' };
+        if (!creado) return { warn: true, mensaje: 'El cliente puede haberse creado. Verifica en Operam buscando el RFC.' };
 
         return { duplicado: false, cliente_id: creado.id, nombre: creado.text };
       },
