@@ -131,7 +131,12 @@ async function crearClienteEnOperam(cliente) {
       const html = await r.text();
       const doc  = new DOMParser().parseFromString(html, 'text/html');
       const form = [...doc.querySelectorAll('form')].find(f => f.querySelector('[name="CustName"]'));
-      if (!form) return { error: 'Formulario no encontrado' };
+      if (!form) {
+        const title = doc.querySelector('title')?.textContent || '';
+        const formCount = doc.querySelectorAll('form').length;
+        const fieldNames = [...doc.querySelectorAll('input[name],select[name],textarea[name]')].map(e => e.name).slice(0, 20);
+        return { error: 'Formulario no encontrado', diag: { title, formCount, fieldNames, htmlSnippet: html.slice(0, 500), url: r.url, status: r.status } };
+      }
 
       const fd = new FormData(form);
       fd.set('CustName',            CustName);
@@ -169,7 +174,7 @@ async function crearClienteEnOperam(cliente) {
       return { status: postResp.status, bodySnippet: postBody.slice(0, 500) };
     }, { formUrl: FORM_URL, postUrl: POST_URL, cliente, defaults: DEFAULTS, CustName, cust_ref, notes });
 
-    if (postStatus?.error) return { error: postStatus.error };
+    if (postStatus?.error) return { error: postStatus.error, diag: postStatus.diag };
     console.log(`[operam] POST status: ${postStatus?.status} body: ${postStatus?.bodySnippet}`);
 
     // 4. Verificar creación
