@@ -1,6 +1,5 @@
 const express = require('express');
 const { chromium } = require('playwright');
-const fs = require('fs');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -14,7 +13,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// Credenciales desde variables de entorno (en Render: Environment > Add var)
 const CONFIG = {
   url:      process.env.OPERAM_URL      || 'https://peltrenacional.operam.pro',
   user:     process.env.OPERAM_USER,
@@ -31,7 +29,6 @@ const DEFAULTS = {
   dimension2_id:     '5',
 };
 
-// Mapa de texto de régimen SAT → código
 const REGIMENES = {
   'General de Ley Personas Morales':                                     '601',
   'Personas Morales con Fines no Lucrativos':                            '603',
@@ -69,18 +66,11 @@ function toTitleCase(s) {
 async function login(page) {
   await page.goto(CONFIG.url, { waitUntil: 'domcontentloaded' });
   const esLogin = await page.$('[name="user_name_entry_field"]');
-  if (!esLogin) {
-    console.log('[operam] Ya logueado, URL:', page.url());
-    return;
-  }
+  if (!esLogin) return;
   await page.fill('[name="user_name_entry_field"]', CONFIG.user);
   await page.fill('[name="password"]', CONFIG.password);
   await page.click('button[type="submit"], input[type="submit"]');
   await page.waitForURL(url => !url.href.includes('login') && !url.href.includes('access'), { timeout: 15000 });
-  await page.waitForLoadState('networkidle');
-  console.log('[operam] Post-login URL:', page.url());
-  const cookies = await page.context().cookies();
-  console.log('[operam] Cookies:', cookies.map(c => c.name).join(', '));
 }
 
 async function crearClienteEnOperam(cliente) {
@@ -100,98 +90,109 @@ async function crearClienteEnOperam(cliente) {
   try {
     console.log(`[operam] Iniciando creación RFC: ${cliente.tax_id}`);
     await login(page);
-    console.log(`[operam] Login OK`);
+    console.log(`[operam] Login OK, URL: ${page.url()}`);
 
-    // 1. Verificar si el RFC ya existe — fetch desde el browser con X-Requested-With
-    const ajaxResp1 = await page.evaluate(async ({ url }) => {
-      const r = await fetch(url, {
-        credentials: 'include',
-        headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
-      });
-      const text = await r.text();
-      const hdrs = [...r.headers.entries()].map(([k,v]) => `${k}:${v}`).join(' | ');
-      return { status: r.status, text, hdrs };
-    }, { url: `${AJAX_URL}?inactive=false&term=${encodeURIComponent(cliente.tax_id)}` });
-    console.log(`[operam] AJAX status:${ajaxResp1.status} headers:${ajaxResp1.hdrs.slice(0,300)}`);
-    console.log(`[operam] AJAX body: ${ajaxResp1.text.slice(0, 300)}`);
-    const ajaxText1 = ajaxResp1.text;
+    // Todo en un solo page.evaluate para mantener la sesión
+    const result = await page.evaluate(
+      async ({ formUrl, postUrl, ajaxUrl, cliente, defaults, CustName, cust_ref, notes }) => {
 
-    let ajaxData1 = { results: [] };
-    if (ajaxText1) {
-      try { ajaxData1 = JSON.parse(ajaxText1); }
-      catch(e) { return { error: `Respuesta AJAX no válida: ${ajaxText1.slice(0, 150)}` }; }
-    }
+        // 1. Verificar si el RFC ya existe
+        const ajaxR = await fetch(
+          `${ajaxUrl}?inactive=false&term=${encodeURIComponent(cliente.tax_id)}`,
+          { credentials: 'include' }
+        );
+        const ajaxText = await ajaxR.text();
 
-    const existente = ajaxData1.results?.find(x => x.rfc === cliente.tax_id);
-    if (existente) return { duplicado: true, cliente_id: existente.id, nombre: existente.text };
+        let ajaxData = { results: [] };
+        if (ajaxText) {
+          try { ajaxData = JSON.parse(ajaxText); }
+          catch(e) { return { error: `Respuesta AJAX no válida: ${ajaxText.slice(0, 150)}` }; }
+        }
 
-    // 2. Obtener formulario y hacer POST — todo desde el browser (fetch con credentials)
-    const postStatus = await page.evaluate(async ({ formUrl, postUrl, cliente, defaults, CustName, cust_ref, notes }) => {
-      const r = await fetch(formUrl, { credentials: 'include' });
-      const html = await r.text();
-      const doc  = new DOMParser().parseFromString(html, 'text/html');
-      const form = [...doc.querySelectorAll('form')].find(f => f.querySelector('[name="CustName"]'));
-      if (!form) {
-        const title = doc.querySelector('title')?.textContent || '';
-        const formCount = doc.querySelectorAll('form').length;
-        const fieldNames = [...doc.querySelectorAll('input[name],select[name],textarea[name]')].map(e => e.name).slice(0, 20);
-        return { error: 'Formulario no encontrado', diag: { title, formCount, fieldNames, htmlSnippet: html.slice(0, 500), url: r.url, status: r.status } };
-      }
+        const existente = ajaxData.results?.find(x => x.rfc === cliente.tax_id);
+        if (existente) {
+          return { duplicado: true, cliente_id: existente.id, nombre: existente.text };
+        }
 
-      const fd = new FormData(form);
-      fd.set('CustName',            CustName);
-      fd.set('cust_ref',            cust_ref);
-      fd.set('tax_id',              cliente.tax_id);
-      fd.set('idcif',               cliente.idcif               || '');
-      fd.set('street',              cliente.street               || '');
-      fd.set('street_number',       cliente.street_number        || '');
-      fd.set('suite_number',        cliente.suite_number         || '');
-      fd.set('district',            cliente.district             || '');
-      fd.set('postal_code',         cliente.postal_code          || '');
-      fd.set('city',                cliente.city                 || '');
-      fd.set('state',               cliente.state                || '');
-      fd.set('country',             cliente.country              || 'México');
-      fd.set('phone',               cliente.phone                || '');
-      fd.set('email',               cliente.email                || '');
-      fd.set('salesman',            cliente.salesman             || '');
-      fd.set('segmento_id',         cliente.segmento_id          || '');
-      fd.set('cfdi_regimen_fiscal', cliente.cfdi_regimen_fiscal  || '612');
-      fd.set('notes',               notes);
-      fd.set('cfdi_form_payment',   defaults.cfdi_form_payment);
-      fd.set('timbrado_uso_cfdi',   cliente.timbrado_uso_cfdi    || defaults.timbrado_uso_cfdi);
-      fd.set('payment_terms',       defaults.payment_terms);
-      fd.set('location',            defaults.location);
-      fd.set('area',                defaults.area);
-      fd.delete('dimensiones_id[]');
-      fd.append('dimensiones_id[]', defaults.dimension1_id);
-      fd.append('dimensiones_id[]', defaults.dimension2_id);
-      fd.set('dimension1_id',       defaults.dimension1_id);
-      fd.set('dimension2_id',       defaults.dimension2_id);
-      fd.set('process',             'Añadir Nuevo Cliente');
+        // 2. Obtener formulario
+        const r    = await fetch(formUrl, { credentials: 'include' });
+        const html = await r.text();
+        const doc  = new DOMParser().parseFromString(html, 'text/html');
+        const form = [...doc.querySelectorAll('form')].find(f => f.querySelector('[name="CustName"]'));
+        if (!form) {
+          const title = doc.querySelector('title')?.textContent || '';
+          const formCount = doc.querySelectorAll('form').length;
+          const fieldNames = [...doc.querySelectorAll('input[name],select[name],textarea[name]')]
+            .map(e => e.name).slice(0, 20);
+          return {
+            error: 'Formulario no encontrado',
+            diag: { title, formCount, fieldNames, htmlSnippet: html.slice(0, 500) }
+          };
+        }
 
-      const postResp = await fetch(postUrl, { method: 'POST', credentials: 'include', body: fd });
-      const postBody = await postResp.text();
-      return { status: postResp.status, bodySnippet: postBody.slice(0, 500) };
-    }, { formUrl: FORM_URL, postUrl: POST_URL, cliente, defaults: DEFAULTS, CustName, cust_ref, notes });
+        // 3. Llenar y enviar
+        const fd = new FormData(form);
+        fd.set('CustName',            CustName);
+        fd.set('cust_ref',            cust_ref);
+        fd.set('tax_id',              cliente.tax_id);
+        fd.set('idcif',               cliente.idcif               || '');
+        fd.set('street',              cliente.street               || '');
+        fd.set('street_number',       cliente.street_number        || '');
+        fd.set('suite_number',        cliente.suite_number         || '');
+        fd.set('district',            cliente.district             || '');
+        fd.set('postal_code',         cliente.postal_code          || '');
+        fd.set('city',                cliente.city                 || '');
+        fd.set('state',               cliente.state                || '');
+        fd.set('country',             cliente.country              || 'México');
+        fd.set('phone',               cliente.phone                || '');
+        fd.set('email',               cliente.email                || '');
+        fd.set('salesman',            cliente.salesman             || '');
+        fd.set('segmento_id',         cliente.segmento_id          || '');
+        fd.set('cfdi_regimen_fiscal', cliente.cfdi_regimen_fiscal  || '612');
+        fd.set('notes',               notes);
+        fd.set('cfdi_form_payment',   defaults.cfdi_form_payment);
+        fd.set('timbrado_uso_cfdi',   cliente.timbrado_uso_cfdi    || defaults.timbrado_uso_cfdi);
+        fd.set('payment_terms',       defaults.payment_terms);
+        fd.set('location',            defaults.location);
+        fd.set('area',                defaults.area);
+        fd.delete('dimensiones_id[]');
+        fd.append('dimensiones_id[]', defaults.dimension1_id);
+        fd.append('dimensiones_id[]', defaults.dimension2_id);
+        fd.set('dimension1_id',       defaults.dimension1_id);
+        fd.set('dimension2_id',       defaults.dimension2_id);
+        fd.set('process',             'Añadir Nuevo Cliente');
 
-    if (postStatus?.error) return { error: postStatus.error, diag: postStatus.diag };
-    console.log(`[operam] POST status: ${postStatus?.status} body: ${postStatus?.bodySnippet}`);
+        const postResp = await fetch(postUrl, { method: 'POST', credentials: 'include', body: fd });
+        const postBody = await postResp.text();
 
-    // 4. Verificar creación
-    await new Promise(r => setTimeout(r, 2000));
-    const ajaxText2 = await page.evaluate(async ({ url }) => {
-      const r = await fetch(url, {
-        credentials: 'include',
-        headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
-      });
-      return r.text();
-    }, { url: `${AJAX_URL}?inactive=false&term=${encodeURIComponent(cliente.tax_id)}` });
-    let ajaxData2;
-    try { ajaxData2 = JSON.parse(ajaxText2); } catch(e) { ajaxData2 = {}; }
-    const creado = ajaxData2.results?.find(x => x.rfc === cliente.tax_id);
+        // 4. Confirmar que quedó registrado
+        const ajaxR2 = await fetch(
+          `${ajaxUrl}?inactive=false&term=${encodeURIComponent(cliente.tax_id)}`,
+          { credentials: 'include' }
+        );
+        const ajaxText2 = await ajaxR2.text();
+        let ajaxData2 = { results: [] };
+        if (ajaxText2) {
+          try { ajaxData2 = JSON.parse(ajaxText2); } catch(e) { /* ignore */ }
+        }
+        const creado = ajaxData2.results?.find(x => x.rfc === cliente.tax_id);
 
-    if (!creado) return { warn: true, mensaje: 'El cliente puede haberse creado. Verifica en Operam buscando el RFC.' };
-    return { duplicado: false, cliente_id: creado.id, nombre: creado.text };
+        if (!creado) {
+          return {
+            warn: true,
+            mensaje: 'El POST se ejecutó pero el cliente no aparece en Operam. Verificar manualmente.',
+            postStatus: postResp.status,
+            postSnippet: postBody.slice(0, 300)
+          };
+        }
+
+        return { duplicado: false, cliente_id: creado.id, nombre: creado.text };
+      },
+      { formUrl: FORM_URL, postUrl: POST_URL, ajaxUrl: AJAX_URL, cliente, defaults: DEFAULTS, CustName, cust_ref, notes }
+    );
+
+    console.log(`[operam] Resultado:`, JSON.stringify(result).slice(0, 300));
+    return result;
 
   } finally {
     await browser.close();
