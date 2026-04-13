@@ -103,14 +103,18 @@ async function crearClienteEnOperam(cliente) {
     console.log(`[operam] Login OK`);
 
     // 1. Verificar si el RFC ya existe — fetch desde el browser con X-Requested-With
-    const ajaxText1 = await page.evaluate(async ({ url }) => {
+    const ajaxResp1 = await page.evaluate(async ({ url }) => {
       const r = await fetch(url, {
         credentials: 'include',
         headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
       });
-      return r.text();
+      const text = await r.text();
+      const hdrs = [...r.headers.entries()].map(([k,v]) => `${k}:${v}`).join(' | ');
+      return { status: r.status, text, hdrs };
     }, { url: `${AJAX_URL}?inactive=false&term=${encodeURIComponent(cliente.tax_id)}` });
-    console.log(`[operam] AJAX body: ${ajaxText1.slice(0, 300)}`);
+    console.log(`[operam] AJAX status:${ajaxResp1.status} headers:${ajaxResp1.hdrs.slice(0,300)}`);
+    console.log(`[operam] AJAX body: ${ajaxResp1.text.slice(0, 300)}`);
+    const ajaxText1 = ajaxResp1.text;
 
     let ajaxData1;
     try { ajaxData1 = JSON.parse(ajaxText1); }

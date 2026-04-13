@@ -492,6 +492,7 @@ function setStatus(tipo, msg) {
   const el = document.getElementById('status');
   el.className = `status ${tipo}`;
   el.textContent = msg;
+  el.style.display = tipo ? '' : 'none';
 }
 
 // ─── Eventos ──────────────────────────────────────────────────────────────────
@@ -521,7 +522,6 @@ async function procesarPDF(file) {
     poblarForm(data);
     document.getElementById('formSection').classList.remove('hidden');
     setStatus('', '');
-    document.getElementById('status').style.display = 'none';
     if (!data.tax_id) {
       setStatus('error', 'No se pudo extraer el RFC. Verifica los campos manualmente.');
     }
