@@ -116,9 +116,11 @@ async function crearClienteEnOperam(cliente) {
     console.log(`[operam] AJAX body: ${ajaxResp1.text.slice(0, 300)}`);
     const ajaxText1 = ajaxResp1.text;
 
-    let ajaxData1;
-    try { ajaxData1 = JSON.parse(ajaxText1); }
-    catch(e) { return { error: `Respuesta AJAX no válida: ${ajaxText1.slice(0, 150)}` }; }
+    let ajaxData1 = { results: [] };
+    if (ajaxText1) {
+      try { ajaxData1 = JSON.parse(ajaxText1); }
+      catch(e) { return { error: `Respuesta AJAX no válida: ${ajaxText1.slice(0, 150)}` }; }
+    }
 
     const existente = ajaxData1.results?.find(x => x.rfc === cliente.tax_id);
     if (existente) return { duplicado: true, cliente_id: existente.id, nombre: existente.text };
@@ -163,11 +165,12 @@ async function crearClienteEnOperam(cliente) {
       fd.set('process',             'Añadir Nuevo Cliente');
 
       const postResp = await fetch(postUrl, { method: 'POST', credentials: 'include', body: fd });
-      return { status: postResp.status };
+      const postBody = await postResp.text();
+      return { status: postResp.status, bodySnippet: postBody.slice(0, 500) };
     }, { formUrl: FORM_URL, postUrl: POST_URL, cliente, defaults: DEFAULTS, CustName, cust_ref, notes });
 
     if (postStatus?.error) return { error: postStatus.error };
-    console.log(`[operam] POST status: ${postStatus?.status}`);
+    console.log(`[operam] POST status: ${postStatus?.status} body: ${postStatus?.bodySnippet}`);
 
     // 4. Verificar creación
     await new Promise(r => setTimeout(r, 2000));
