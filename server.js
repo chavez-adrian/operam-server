@@ -92,23 +92,10 @@ async function crearClienteEnOperam(cliente) {
     console.log(`[operam] Iniciando creación RFC: ${cliente.tax_id}`);
     await login(page);
 
-    // 1. Verificar duplicados — navegar al AJAX endpoint directamente
+    // 1. Navegar al formulario de nuevo cliente (establece contexto de sesión)
     const ajaxCheckUrl = `${AJAX_URL}?inactive=false&term=${encodeURIComponent(cliente.tax_id)}`;
-    const ajaxResp = await page.goto(ajaxCheckUrl, { waitUntil: 'domcontentloaded' });
-    const ajaxText = await page.evaluate(() => document.body?.innerText || '');
-    console.log(`[operam] AJAX check: ${ajaxText.slice(0, 200)}`);
-
-    let ajaxData = { results: [] };
-    if (ajaxText) {
-      try { ajaxData = JSON.parse(ajaxText); } catch(e) { /* no JSON = no results */ }
-    }
-    const existente = ajaxData.results?.find(x => x.rfc === cliente.tax_id);
-    if (existente) return { duplicado: true, cliente_id: existente.id, nombre: existente.text };
-
-    // 2. Navegar al formulario de nuevo cliente
     await page.goto(FORM_URL, { waitUntil: 'domcontentloaded' });
-    const currentUrl = page.url();
-    console.log(`[operam] Formulario URL: ${currentUrl}`);
+    console.log(`[operam] Formulario URL: ${page.url()}`);
 
     // Verificar que estamos en el formulario, no en login
     const hasCustName = await page.$('[name="CustName"]');
@@ -117,92 +104,72 @@ async function crearClienteEnOperam(cliente) {
       const fields = await page.evaluate(() =>
         [...document.querySelectorAll('input[name],select[name]')].map(e => e.name).slice(0, 15)
       );
-      return { error: 'Formulario no encontrado (sesión perdida)', diag: { title, url: currentUrl, fields } };
+      return { error: 'Formulario no encontrado (sesión perdida)', diag: { title, url: page.url(), fields } };
     }
 
-    // 3. Llenar el formulario directamente en la página
-    await page.fill('[name="CustName"]', CustName);
-    await page.fill('[name="cust_ref"]', cust_ref);
-    await page.fill('[name="tax_id"]', cliente.tax_id);
-    await page.fill('[name="idcif"]', cliente.idcif || '');
-    await page.fill('[name="street"]', cliente.street || '');
-    await page.fill('[name="street_number"]', cliente.street_number || '');
-    await page.fill('[name="suite_number"]', cliente.suite_number || '');
-    await page.fill('[name="district"]', cliente.district || '');
-    await page.fill('[name="postal_code"]', cliente.postal_code || '');
-    await page.fill('[name="city"]', cliente.city || '');
-    await page.fill('[name="state"]', cliente.state || '');
-    await page.fill('[name="country"]', cliente.country || 'México');
-    await page.fill('[name="phone"]', cliente.phone || '');
-    await page.fill('[name="email"]', cliente.email || '');
-    await page.fill('[name="notes"]', notes);
-
-    // Selects y campos que pueden ser select o input
-    const fillOrSelect = async (name, value) => {
-      if (!value) return;
-      const el = await page.$(`[name="${name}"]`);
-      if (!el) return;
-      const tag = await el.evaluate(e => e.tagName.toLowerCase());
-      if (tag === 'select') {
-        await page.selectOption(`[name="${name}"]`, value);
-      } else {
-        await page.fill(`[name="${name}"]`, value);
+    // 3. Duplicate check + fill + POST + verify — todo en un solo evaluate
+    const result = await page.evaluate(async ({ ajaxCheckUrl, postUrl, cliente, defaults, CustName, cust_ref, notes }) => {
+      // 3a. Verificar duplicados
+      const ajaxR = await fetch(ajaxCheckUrl, { credentials: 'include' });
+      const ajaxText = await ajaxR.text();
+      let ajaxData = { results: [] };
+      if (ajaxText) {
+        try { ajaxData = JSON.parse(ajaxText); } catch(e) { /* no results */ }
       }
-    };
+      const existente = ajaxData.results?.find(x => x.rfc === cliente.tax_id);
+      if (existente) return { duplicado: true, cliente_id: existente.id, nombre: existente.text };
 
-    await fillOrSelect('salesman', cliente.salesman || '');
-    await fillOrSelect('segmento_id', cliente.segmento_id || '');
-    await fillOrSelect('cfdi_regimen_fiscal', cliente.cfdi_regimen_fiscal || '612');
-    await fillOrSelect('cfdi_form_payment', DEFAULTS.cfdi_form_payment);
-    await fillOrSelect('timbrado_uso_cfdi', cliente.timbrado_uso_cfdi || DEFAULTS.timbrado_uso_cfdi);
-    await fillOrSelect('payment_terms', DEFAULTS.payment_terms);
-    await fillOrSelect('location', DEFAULTS.location);
-    await fillOrSelect('area', DEFAULTS.area);
-    await fillOrSelect('dimension1_id', DEFAULTS.dimension1_id);
-    await fillOrSelect('dimension2_id', DEFAULTS.dimension2_id);
+      // 3b. Llenar formulario y enviar
+      const form = [...document.querySelectorAll('form')].find(f => f.querySelector('[name="CustName"]'));
+      if (!form) return { error: 'Form no encontrado en evaluate' };
 
-    // Dimensiones array — setear via JS
-    await page.evaluate(({ d1, d2 }) => {
-      const dims = document.querySelectorAll('[name="dimensiones_id[]"]');
-      dims.forEach(el => el.selected = false);
-      // Si es un multi-select
-      const multiSelect = document.querySelector('select[name="dimensiones_id[]"]');
-      if (multiSelect) {
-        [...multiSelect.options].forEach(opt => {
-          opt.selected = (opt.value === d1 || opt.value === d2);
-        });
+      const fd = new FormData(form);
+      fd.set('CustName',            CustName);
+      fd.set('cust_ref',            cust_ref);
+      fd.set('tax_id',              cliente.tax_id);
+      fd.set('idcif',               cliente.idcif               || '');
+      fd.set('street',              cliente.street               || '');
+      fd.set('street_number',       cliente.street_number        || '');
+      fd.set('suite_number',        cliente.suite_number         || '');
+      fd.set('district',            cliente.district             || '');
+      fd.set('postal_code',         cliente.postal_code          || '');
+      fd.set('city',                cliente.city                 || '');
+      fd.set('state',               cliente.state                || '');
+      fd.set('country',             cliente.country              || 'México');
+      fd.set('phone',               cliente.phone                || '');
+      fd.set('email',               cliente.email                || '');
+      fd.set('salesman',            cliente.salesman             || '');
+      fd.set('segmento_id',         cliente.segmento_id          || '');
+      fd.set('cfdi_regimen_fiscal', cliente.cfdi_regimen_fiscal  || '612');
+      fd.set('notes',               notes);
+      fd.set('cfdi_form_payment',   defaults.cfdi_form_payment);
+      fd.set('timbrado_uso_cfdi',   cliente.timbrado_uso_cfdi    || defaults.timbrado_uso_cfdi);
+      fd.set('payment_terms',       defaults.payment_terms);
+      fd.set('location',            defaults.location);
+      fd.set('area',                defaults.area);
+      fd.delete('dimensiones_id[]');
+      fd.append('dimensiones_id[]', defaults.dimension1_id);
+      fd.append('dimensiones_id[]', defaults.dimension2_id);
+      fd.set('dimension1_id',       defaults.dimension1_id);
+      fd.set('dimension2_id',       defaults.dimension2_id);
+      fd.set('process',             'Añadir Nuevo Cliente');
+
+      const resp = await fetch(postUrl, { method: 'POST', credentials: 'include', body: fd });
+
+      // 3c. Verificar creación
+      const ajaxR2 = await fetch(ajaxCheckUrl, { credentials: 'include' });
+      const ajaxText2 = await ajaxR2.text();
+      let ajaxData2 = { results: [] };
+      if (ajaxText2) {
+        try { ajaxData2 = JSON.parse(ajaxText2); } catch(e) { /* ignore */ }
       }
-    }, { d1: DEFAULTS.dimension1_id, d2: DEFAULTS.dimension2_id });
+      const creado = ajaxData2.results?.find(x => x.rfc === cliente.tax_id);
+      if (!creado) return { warn: true, mensaje: 'El POST se ejecutó pero el cliente no aparece. Verificar en Operam.', postStatus: resp.status };
+      return { duplicado: false, cliente_id: creado.id, nombre: creado.text };
+    }, { ajaxCheckUrl, postUrl: POST_URL, cliente, defaults: DEFAULTS, CustName, cust_ref, notes });
 
-    // 4. Submit — click en el botón "Añadir Nuevo Cliente"
-    const submitBtn = await page.$('input[value="Añadir Nuevo Cliente"], button:has-text("Añadir Nuevo Cliente")');
-    if (!submitBtn) {
-      // Fallback: buscar cualquier submit
-      const anySubmit = await page.$('input[type="submit"], button[type="submit"]');
-      if (anySubmit) {
-        const val = await anySubmit.evaluate(e => e.value || e.textContent);
-        console.log(`[operam] Submit encontrado: "${val}"`);
-      }
-      return { error: 'Botón de submit no encontrado' };
-    }
-
-    await submitBtn.click();
-    await page.waitForLoadState('domcontentloaded', { timeout: 15000 });
-    console.log(`[operam] POST completado, URL: ${page.url()}`);
-
-    // 5. Verificar creación
-    await page.goto(ajaxCheckUrl, { waitUntil: 'domcontentloaded' });
-    const ajaxText2 = await page.evaluate(() => document.body?.innerText || '');
-    let ajaxData2 = { results: [] };
-    if (ajaxText2) {
-      try { ajaxData2 = JSON.parse(ajaxText2); } catch(e) { /* ignore */ }
-    }
-    const creado = ajaxData2.results?.find(x => x.rfc === cliente.tax_id);
-
-    if (!creado) {
-      return { warn: true, mensaje: 'El POST se ejecutó pero el cliente no aparece. Verificar en Operam.' };
-    }
-    return { duplicado: false, cliente_id: creado.id, nombre: creado.text };
+    console.log(`[operam] Resultado:`, JSON.stringify(result).slice(0, 300));
+    return result;
 
   } finally {
     await browser.close();
