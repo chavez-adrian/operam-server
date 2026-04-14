@@ -333,11 +333,15 @@
   window.pdfjsLib = pdfjsLib;
   window.dispatchEvent(new Event('pdfjs-ready'));
 </script>
-<!-- Tesseract.js para OCR (fallback cuando PDF no tiene texto) -->
+<!-- jsQR para leer QR del SAT (fallback preferido) -->
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<!-- Tesseract.js para OCR (último recurso si tampoco hay QR) -->
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script>
 // ─── Config ──────────────────────────────────────────────────────────────────
-const API_URL = 'https://operam-server.onrender.com/api/crear-cliente';
+const API_BASE = 'https://operam-server.onrender.com';
+const API_URL  = `${API_BASE}/api/crear-cliente`;
+const API_QR   = `${API_BASE}/api/csf-from-url`;
 
 // ─── Mapa de regímenes ────────────────────────────────────────────────────────
 const REGIMENES = {
@@ -508,13 +512,64 @@ async function leerPDF(file) {
       .join(' ') + '\n';
   }
 
-  // Fallback OCR si el PDF no tiene texto extraíble
+  // Fallback 1: QR code del SAT (más rápido y preciso que OCR)
   if (itemsTotal === 0 || textoTotal.trim().length < 50) {
-    console.log('[CSF] PDF sin texto — usando OCR');
+    console.log('[CSF] PDF sin texto — buscando QR del SAT');
+    const urlQR = await detectarQR(pdf, totalPaginas);
+    if (urlQR) {
+      console.log('[CSF] QR detectado:', urlQR);
+      setStatus('loading', 'QR del SAT detectado — consultando datos...');
+      setProgress(50, 'Consultando portal del SAT...');
+      try {
+        const r = await fetch(API_QR, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: urlQR }),
+        });
+        const data = await r.json();
+        if (data.ok && data.texto) {
+          console.log('[CSF] Texto recibido del SAT:', data.texto.length, 'caracteres');
+          setProgress(100, 'Datos recibidos del SAT');
+          return data.texto;
+        }
+        console.warn('[CSF] Respuesta del SAT sin texto:', data);
+      } catch (err) {
+        console.error('[CSF] Error al consultar SAT:', err);
+      }
+    }
+
+    // Fallback 2: OCR como último recurso
+    console.log('[CSF] Sin QR útil — usando OCR');
     textoTotal = await ocrPDF(pdf, totalPaginas);
   }
 
   return textoTotal;
+}
+
+// ─── Detección de QR en PDF ───────────────────────────────────────────────────
+async function detectarQR(pdf, totalPaginas) {
+  if (typeof jsQR === 'undefined') {
+    console.warn('[CSF] jsQR no cargado');
+    return null;
+  }
+
+  for (let i = 1; i <= totalPaginas; i++) {
+    setProgress((i / totalPaginas) * 100, `Buscando QR en página ${i} de ${totalPaginas}...`);
+    const page = await pdf.getPage(i);
+    const viewport = page.getViewport({ scale: 2 });
+    const canvas = document.createElement('canvas');
+    canvas.width  = viewport.width;
+    canvas.height = viewport.height;
+    const ctx = canvas.getContext('2d');
+    await page.render({ canvasContext: ctx, viewport }).promise;
+
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const code = jsQR(imageData.data, imageData.width, imageData.height);
+    if (code && code.data && code.data.includes('sat.gob.mx')) {
+      return code.data;
+    }
+  }
+  return null;
 }
 
 // ─── OCR fallback con Tesseract.js ────────────────────────────────────────────

@@ -174,6 +174,53 @@ app.post('/api/crear-cliente', async (req, res) => {
   }
 });
 
+// ─── Proxy para QR del SAT ────────────────────────────────────────────────────
+// Cuando el PDF de la CSF no tiene texto extraíble, el cliente lee el QR
+// y nos manda la URL del SAT. Este endpoint la consulta y devuelve texto plano
+// para que el parser del cliente lo procese igual que el PDF original.
+app.post('/api/csf-from-url', async (req, res) => {
+  const { url } = req.body || {};
+  if (!url || typeof url !== 'string') {
+    return res.status(400).json({ error: 'Falta url' });
+  }
+  let parsed;
+  try { parsed = new URL(url); } catch { return res.status(400).json({ error: 'URL inválida' }); }
+  if (!/\.sat\.gob\.mx$/i.test(parsed.hostname) && parsed.hostname !== 'sat.gob.mx') {
+    return res.status(400).json({ error: 'URL no pertenece al SAT' });
+  }
+
+  try {
+    console.log(`[csf-from-url] Fetching ${url}`);
+    const r = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; PeltreBot/1.0)' },
+    });
+    if (!r.ok) {
+      return res.status(502).json({ error: `SAT respondió ${r.status}` });
+    }
+    const html = await r.text();
+    const texto = html
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/(tr|div|p|li|td|th)>/gi, '\n')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&amp;/gi, '&')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/&quot;/gi, '"')
+      .replace(/[ \t]+/g, ' ')
+      .replace(/\n\s*\n/g, '\n')
+      .trim();
+    console.log(`[csf-from-url] Respuesta: ${texto.length} caracteres`);
+    res.json({ ok: true, texto });
+  } catch (err) {
+    console.error('[csf-from-url]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Permitir CORS en POST ────────────────────────────────────────────────────
 app.get('/health', (_, res) => res.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`Servidor corriendo en puerto ${PORT}`));
