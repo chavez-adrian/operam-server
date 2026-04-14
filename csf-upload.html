@@ -440,7 +440,7 @@ function parsearCSF(texto) {
   // Último fallback: fecha de hoy
   if (!csf_fecha) csf_fecha = new Date().toISOString().slice(0, 10);
 
-  // Actividades económicas
+  // Actividades económicas (formato PDF CSF: "num DESC pct DD/MM/YYYY")
   const actividades = [];
   const actRegex = /(\d+)\s+([A-ZÁÉÍÓÚÑ][^\n]+?)\s+(\d+)\s+(\d{2}\/\d{2}\/\d{4})/g;
   let mAct;
@@ -452,6 +452,16 @@ function parsearCSF(texto) {
     }
   }
 
+  // Regímenes con fecha de alta (formato portal SAT por QR)
+  const regimenesDetalle = [];
+  const regRegex = /R[eé]gimen\s*:\s*(R[eé]gimen [^\n]+?)\s+Fecha de alta\s*:\s*(\d{2})-(\d{2})-(\d{4})/gi;
+  let mReg;
+  while ((mReg = regRegex.exec(texto)) !== null) {
+    const nombre = mReg[1].trim().replace(/\s+/g, ' ');
+    const fecha  = `${mReg[4]}-${mReg[3]}-${mReg[2]}`;
+    regimenesDetalle.push(`${nombre} (alta ${fecha})`);
+  }
+
   // Régimen fiscal principal (el primero que aparezca)
   const { texto: regTexto, codigo: regCodigo } = detectarRegimen(texto);
 
@@ -461,9 +471,12 @@ function parsearCSF(texto) {
   // Persona Física: cust_ref = Nombre + Primer Apellido en Title Case
   const cust_ref = esMoral ? toTC(nombre_s) : toTC(`${nombre_s} ${primer_apellido}`);
 
-  const notes = actividades.length
-    ? `Actividades económicas (CSF ${csf_fecha}):\n` + actividades.map(a => `- ${a}`).join('\n')
-    : '';
+  let notes = '';
+  if (actividades.length) {
+    notes = `Actividades económicas (CSF ${csf_fecha}):\n` + actividades.map(a => `- ${a}`).join('\n');
+  } else if (regimenesDetalle.length) {
+    notes = `Regímenes fiscales (portal SAT ${csf_fecha}):\n` + regimenesDetalle.map(r => `- ${r}`).join('\n');
+  }
 
   return {
     CustName, cust_ref,
@@ -547,6 +560,12 @@ async function leerPDF(file) {
         if (data.ok && data.texto) {
           console.log('[CSF] Texto recibido del SAT:', data.texto.length, 'caracteres');
           setProgress(100, 'Datos recibidos del SAT');
+          // Extraer IdCIF del URL del QR (portal SAT no lo incluye en el texto)
+          const idcifDelQR = extraerIdCifDeUrl(urlQR);
+          if (idcifDelQR) {
+            console.log('[CSF] IdCIF extraído del QR:', idcifDelQR);
+            return `idCIF: ${idcifDelQR}\n${data.texto}`;
+          }
           return data.texto;
         }
         console.warn('[CSF] Respuesta del SAT sin texto:', data);
@@ -561,6 +580,26 @@ async function leerPDF(file) {
   }
 
   return textoTotal;
+}
+
+// ─── Extraer IdCIF del URL del QR (parámetro D3) ─────────────────────────────
+// Formato típico: D3=10_RFC_IDCIF o similar. El IdCIF es una secuencia de 10-12 dígitos.
+function extraerIdCifDeUrl(url) {
+  try {
+    const u = new URL(url);
+    // Probar todos los parámetros de query
+    for (const [, val] of u.searchParams) {
+      const partes = val.split(/[_\-|]/);
+      for (const p of partes) {
+        if (/^\d{10,12}$/.test(p)) return p;
+      }
+    }
+    // Fallback: buscar en el path
+    const match = url.match(/\b(\d{10,12})\b/);
+    return match ? match[1] : '';
+  } catch {
+    return '';
+  }
 }
 
 // ─── Detección de QR en PDF ───────────────────────────────────────────────────
