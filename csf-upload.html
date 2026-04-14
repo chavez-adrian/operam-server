@@ -382,16 +382,19 @@ function parsearCSF(texto) {
     return m ? m[group].trim() : '';
   };
 
-  const esMoral = /Denominaci[oó]n\/Raz[oó]n Social/i.test(texto);
+  const esMoral = /Denominaci[oó]n\/?Raz[oó]n Social/i.test(texto);
   let nombre_s, primer_apellido, segundo_apellido;
   if (esMoral) {
-    nombre_s         = get(/Denominaci[oó]n\/Raz[oó]n Social\s*:\s*(.+?)(?=\s*R[eé]gimen Capital\s*:|\s*Nombre Comercial\s*:|\n|$)/i);
+    nombre_s         = get(/Denominaci[oó]n\/?Raz[oó]n Social\s*:\s*(.+?)(?=\s*(?:R[eé]gimen Capital|Nombre Comercial|Fecha|RFC)\s*:|\n\n|$)/is);
     primer_apellido  = '';
     segundo_apellido = '';
   } else {
-    nombre_s         = get(/Nombre\s*\(s\)\s*:\s*([A-ZÁÉÍÓÚÑ ]+?)(?:\n|Primer)/i);
-    primer_apellido  = get(/Primer Apellido\s*:\s*([A-ZÁÉÍÓÚÑ]+)/i);
-    segundo_apellido = get(/Segundo Apellido\s*:\s*([A-ZÁÉÍÓÚÑ]+)/i);
+    // "Nombre (s):" (PDF CSF) o "Nombre:" (portal SAT por QR)
+    nombre_s         = get(/(?:^|\s)Nombre\s*(?:\(s\))?\s*:\s*([A-ZÁÉÍÓÚÑ ]+?)(?=\s*(?:Primer Apellido|Apellido Paterno|Apellido|RFC|Fecha|$))/i);
+    // "Primer Apellido:" (PDF) o "Apellido Paterno:" (portal SAT)
+    primer_apellido  = get(/(?:Primer Apellido|Apellido Paterno)\s*:\s*([A-ZÁÉÍÓÚÑ ]+?)(?=\s*(?:Segundo Apellido|Apellido Materno|RFC|Fecha|$))/i);
+    // "Segundo Apellido:" (PDF) o "Apellido Materno:" (portal SAT)
+    segundo_apellido = get(/(?:Segundo Apellido|Apellido Materno)\s*:\s*([A-ZÁÉÍÓÚÑ ]+?)(?=\s*(?:RFC|CURP|Fecha|$))/i);
   }
   // RFC: acepta "RFC", "R.F.C.", con o sin dos puntos, con o sin espacios internos
   let rfc = '';
@@ -405,13 +408,19 @@ function parsearCSF(texto) {
   console.log('[CSF] RFC extraído:', rfc || '(vacío)');
   console.log('[CSF] texto completo:\n', texto);
   const idcif            = get(/idCIF\s*:\s*(\d+)/i);
-  const cp               = get(/Código Postal\s*:?\s*(\d{5})/i);
-  const vialidad         = get(/Nombre de Vialidad\s*:\s*([A-ZÁÉÍÓÚÑ0-9 ]+?)(?:\n|Número)/i);
-  const num_ext          = get(/Número Exterior\s*:\s*([^\n]+?)(?:\n|Número)/i);
-  const num_int          = get(/Número Interior\s*:\s*([^\n]*?)(?:\n|Nombre)/i);
-  const colonia          = get(/Nombre de la Colonia\s*:\s*([A-ZÁÉÍÓÚÑ0-9 ]+?)(?:\n|Nombre)/i);
-  const municipio        = get(/Nombre del Municipio[^:]*:\s*([A-ZÁÉÍÓÚÑ0-9 ]+?)(?:\n|Nombre)/i);
-  const estado           = get(/Nombre de la Entidad Federativa\s*:\s*([A-ZÁÉÍÓÚÑ0-9 ]+?)(?:\s*Entre Calle|\s*Y Calle|\n|$)/i);
+  // Código postal: "Código Postal:" (PDF) o "CP:" (portal SAT)
+  const cp               = get(/(?:C[oó]digo Postal|\bCP)\s*:?\s*(\d{5})/i);
+  // Vialidad: "Nombre de Vialidad:" (PDF) o "Nombre de la Vialidad:" (portal SAT)
+  const vialidad         = get(/Nombre de (?:la )?Vialidad\s*:\s*([A-ZÁÉÍÓÚÑ0-9 ]+?)(?=\s*(?:N[uú]mero|Tipo de|Nombre|Colonia|Entre Calle|$))/i);
+  const num_ext          = get(/N[uú]mero [Ee]xterior\s*:\s*([^\n]+?)(?=\s*(?:N[uú]mero|Nombre|Colonia|CP|C[oó]digo|Entre|$))/i);
+  const num_int_raw      = get(/N[uú]mero [Ii]nterior\s*:\s*([^\n]*?)(?=\s*(?:Nombre|Colonia|CP|C[oó]digo|Municipio|Entidad|Entre|Correo|$))/i);
+  const num_int          = /^\s*CP\b/i.test(num_int_raw) ? '' : num_int_raw;
+  // Colonia: "Nombre de la Colonia:" (PDF) o "Colonia:" (portal SAT)
+  const colonia          = get(/(?:Nombre de la )?Colonia\s*:\s*([A-ZÁÉÍÓÚÑ0-9 ]+?)(?=\s*(?:Nombre|Tipo de|CP|C[oó]digo|Municipio|Entidad|Entre|$))/i);
+  // Municipio: "Nombre del Municipio o Demarcación Territorial:" (PDF) o "Municipio o delegación:" (portal SAT)
+  const municipio        = get(/(?:Nombre del )?Municipio(?:\s+o\s+(?:Demarcaci[oó]n Territorial|delegaci[oó]n))?\s*:\s*([A-ZÁÉÍÓÚÑ0-9 ]+?)(?=\s*(?:Nombre|Colonia|Entidad|Tipo|$))/i);
+  // Estado: "Nombre de la Entidad Federativa:" (PDF) o "Entidad Federativa:" (portal SAT)
+  const estado           = get(/(?:Nombre de la )?Entidad Federativa\s*:\s*([A-ZÁÉÍÓÚÑ0-9 ]+?)(?=\s*(?:Entre Calle|Y Calle|Correo|Caracter[ií]sticas|Municipio|Colonia|$))/i);
 
   // Fecha de emisión (ej: "A 02 DE ENERO DE 2026" o "A 15 DE MARZO DE 2025")
   const MESES = {enero:'01',febrero:'02',marzo:'03',abril:'04',mayo:'05',junio:'06',
@@ -422,6 +431,14 @@ function parsearCSF(texto) {
     const mes = MESES[mFecha[2].toLowerCase()] || '01';
     csf_fecha = `${mFecha[3]}-${mes}-${mFecha[1].padStart(2,'0')}`;
   }
+  // Fallback (portal SAT por QR): "Fecha del último cambio de situación: DD-MM-YYYY"
+  if (!csf_fecha) {
+    const mFecha2 = texto.match(/Fecha del [uú]ltimo cambio de situaci[oó]n\s*:?\s*(\d{2})-(\d{2})-(\d{4})/i)
+                 || texto.match(/Fecha de Inicio de operaciones\s*:?\s*(\d{2})-(\d{2})-(\d{4})/i);
+    if (mFecha2) csf_fecha = `${mFecha2[3]}-${mFecha2[2]}-${mFecha2[1]}`;
+  }
+  // Último fallback: fecha de hoy
+  if (!csf_fecha) csf_fecha = new Date().toISOString().slice(0, 10);
 
   // Actividades económicas
   const actividades = [];
