@@ -116,6 +116,31 @@
   .status.error   { background: #ffeaea; color: #c62828; display: block; }
   .status.warn    { background: #fff8e1; color: #e65100; display: block; }
 
+  /* Progress bar */
+  .progress-wrap {
+    display: none;
+    margin-bottom: 16px;
+  }
+  .progress-wrap.active { display: block; }
+  .progress-label {
+    font-size: 13px;
+    color: #555;
+    margin-bottom: 6px;
+    text-align: center;
+  }
+  .progress-track {
+    background: #e0e0e0;
+    border-radius: 6px;
+    height: 8px;
+    overflow: hidden;
+  }
+  .progress-bar {
+    background: #1a1a1a;
+    height: 100%;
+    width: 0%;
+    transition: width 0.25s ease;
+  }
+
   .hidden { display: none; }
   .spinner { display: inline-block; animation: spin 1s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
@@ -153,8 +178,14 @@
     <p>Toca aquí o arrastra el PDF</p>
   </div>
 
-  <!-- Status -->
+  <!-- Status superior -->
   <div class="status" id="status"></div>
+
+  <!-- Barra de progreso superior -->
+  <div class="progress-wrap" id="progressTop">
+    <div class="progress-label" id="progressLabelTop"></div>
+    <div class="progress-track"><div class="progress-bar" id="progressBarTop"></div></div>
+  </div>
 
   <!-- Form (hidden until PDF parsed) -->
   <div id="formSection" class="hidden">
@@ -279,6 +310,15 @@
       </div>
     </div>
 
+    <!-- Status inferior (arriba del botón) -->
+    <div class="status" id="statusBottom"></div>
+
+    <!-- Barra de progreso inferior -->
+    <div class="progress-wrap" id="progressBottom">
+      <div class="progress-label" id="progressLabelBottom"></div>
+      <div class="progress-track"><div class="progress-bar" id="progressBarBottom"></div></div>
+    </div>
+
     <button class="btn btn-primary" id="btnCrear" onclick="crearCliente()">
       Crear cliente en Operam
     </button>
@@ -293,6 +333,8 @@
   window.pdfjsLib = pdfjsLib;
   window.dispatchEvent(new Event('pdfjs-ready'));
 </script>
+<!-- Tesseract.js para OCR (fallback cuando PDF no tiene texto) -->
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script>
 // ─── Config ──────────────────────────────────────────────────────────────────
 const API_URL = 'https://operam-server.onrender.com/api/crear-cliente';
@@ -447,19 +489,71 @@ async function leerPDF(file) {
     standardFontDataUrl: `${PDFJS_BASE}/standard_fonts/`,
   }).promise;
 
+  const totalPaginas = Math.min(pdf.numPages, 2);
   console.log('[CSF] PDF cargado, páginas:', pdf.numPages);
-  let textoTotal = '';
 
-  for (let i = 1; i <= Math.min(pdf.numPages, 2); i++) {
+  // Intento 1: extraer texto nativo del PDF
+  let textoTotal = '';
+  let itemsTotal = 0;
+
+  for (let i = 1; i <= totalPaginas; i++) {
+    setProgress((i / totalPaginas) * 50, `Leyendo texto de página ${i} de ${totalPaginas}...`);
     const page    = await pdf.getPage(i);
     const content = await page.getTextContent({ includeMarkedContent: true });
     console.log(`[CSF] Página ${i}: ${content.items.length} items`);
-    textoTotal   += content.items
+    itemsTotal += content.items.length;
+    textoTotal += content.items
       .filter(item => item.str !== undefined)
       .map(item => item.str)
       .join(' ') + '\n';
   }
 
+  // Fallback OCR si el PDF no tiene texto extraíble
+  if (itemsTotal === 0 || textoTotal.trim().length < 50) {
+    console.log('[CSF] PDF sin texto — usando OCR');
+    textoTotal = await ocrPDF(pdf, totalPaginas);
+  }
+
+  return textoTotal;
+}
+
+// ─── OCR fallback con Tesseract.js ────────────────────────────────────────────
+async function ocrPDF(pdf, totalPaginas) {
+  if (typeof Tesseract === 'undefined') {
+    throw new Error('Tesseract.js no cargó. Verifica la conexión a internet.');
+  }
+
+  setStatus('loading', 'PDF sin texto — iniciando OCR (puede tardar)...');
+  setProgress(0, 'Inicializando OCR...');
+
+  const worker = await Tesseract.createWorker('spa', 1, {
+    logger: m => {
+      if (m.status === 'recognizing text') {
+        const pct = Math.round(m.progress * 100);
+        setProgress(pct, `OCR en progreso: ${pct}%`);
+      }
+    },
+  });
+
+  let textoTotal = '';
+
+  for (let i = 1; i <= totalPaginas; i++) {
+    setProgress(0, `Renderizando página ${i} de ${totalPaginas}...`);
+    const page = await pdf.getPage(i);
+    const viewport = page.getViewport({ scale: 2.5 });
+    const canvas = document.createElement('canvas');
+    canvas.width  = viewport.width;
+    canvas.height = viewport.height;
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+
+    setStatus('loading', `OCR página ${i} de ${totalPaginas}...`);
+    const { data: { text } } = await worker.recognize(canvas);
+    console.log(`[CSF-OCR] Página ${i}: ${text.length} caracteres`);
+    textoTotal += text + '\n';
+  }
+
+  await worker.terminate();
+  setProgress(null);
   return textoTotal;
 }
 
@@ -521,12 +615,29 @@ function leerForm() {
   };
 }
 
-// ─── Mostrar status ───────────────────────────────────────────────────────────
+// ─── Mostrar status (arriba y abajo) ──────────────────────────────────────────
 function setStatus(tipo, msg) {
-  const el = document.getElementById('status');
-  el.className = `status ${tipo}`;
-  el.textContent = msg;
-  el.style.display = tipo ? '' : 'none';
+  ['status', 'statusBottom'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.className = `status ${tipo}`;
+    el.textContent = msg;
+    el.style.display = tipo ? '' : 'none';
+  });
+}
+
+// ─── Barra de progreso (arriba y abajo) ───────────────────────────────────────
+function setProgress(pct, label) {
+  const show = pct !== null;
+  ['progressTop', 'progressBottom'].forEach(id => {
+    document.getElementById(id).classList.toggle('active', show);
+  });
+  if (!show) return;
+  const clamped = Math.max(0, Math.min(100, pct));
+  document.getElementById('progressBarTop').style.width    = `${clamped}%`;
+  document.getElementById('progressBarBottom').style.width = `${clamped}%`;
+  document.getElementById('progressLabelTop').textContent    = label || '';
+  document.getElementById('progressLabelBottom').textContent = label || '';
 }
 
 // ─── Eventos ──────────────────────────────────────────────────────────────────
@@ -548,18 +659,23 @@ pdfInput.addEventListener('change', e => {
 });
 
 async function procesarPDF(file) {
-  setStatus('loading', '⏳ Leyendo PDF...');
+  setStatus('loading', 'Leyendo PDF...');
+  setProgress(0, 'Cargando archivo...');
   uploadZone.style.display = 'none';
   try {
     const texto = await leerPDF(file);
     const data  = parsearCSF(texto);
     poblarForm(data);
     document.getElementById('formSection').classList.remove('hidden');
+    setProgress(null);
     setStatus('', '');
     if (!data.tax_id) {
       setStatus('error', 'No se pudo extraer el RFC. Verifica los campos manualmente.');
+    } else {
+      setStatus('ok', `Datos extraídos correctamente. RFC: ${data.tax_id}`);
     }
   } catch (err) {
+    setProgress(null);
     setStatus('error', `Error al leer el PDF: ${err.message}`);
     uploadZone.style.display = '';
   }
@@ -614,7 +730,8 @@ async function crearCliente() {
 function resetForm() {
   pdfInput.value = '';
   document.getElementById('formSection').classList.add('hidden');
-  document.getElementById('status').style.display = 'none';
+  setStatus('', '');
+  setProgress(null);
   uploadZone.style.display = '';
 }
 </script>
