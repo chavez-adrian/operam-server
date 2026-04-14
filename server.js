@@ -1,5 +1,4 @@
 const express = require('express');
-const { chromium } = require('playwright');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -15,18 +14,23 @@ app.use((req, res, next) => {
 
 const CONFIG = {
   url:      process.env.OPERAM_URL      || 'https://peltrenacional.operam.pro',
+  company:  process.env.OPERAM_COMPANY  || '346',
   user:     process.env.OPERAM_USER,
   password: process.env.OPERAM_PASSWORD,
 };
 
 const DEFAULTS = {
-  cfdi_form_payment: '99',
-  timbrado_uso_cfdi: 'S01',
-  payment_terms:     '9',
-  location:          '40',
-  area:              '1',
-  dimension1_id:     '1',
-  dimension2_id:     '5',
+  cfdi_form_payment:   '99',
+  cfdi_method_payment: 'PPD',
+  timbrado_uso_cfdi:   'S01',
+  payment_terms:       9,
+  location:            '40',
+  area:                1,
+  dimension_id:        1,
+  dimension2_id:       5,
+  credit_limit:        0,
+  discount:            0,
+  pymt_discount:       0,
 };
 
 const REGIMENES = {
@@ -63,120 +67,93 @@ function toTitleCase(s) {
   return s.toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
 }
 
-async function login(page) {
-  await page.goto(CONFIG.url, { waitUntil: 'domcontentloaded' });
-  const esLogin = await page.$('[name="user_name_entry_field"]');
-  if (!esLogin) return;
-  await page.fill('[name="user_name_entry_field"]', CONFIG.user);
-  await page.fill('[name="password"]', CONFIG.password);
-  await page.click('button[type="submit"], input[type="submit"]');
-  await page.waitForURL(url => !url.href.includes('login') && !url.href.includes('access'), { timeout: 15000 });
-  console.log('[operam] Login OK, URL:', page.url());
+// ─── API v3 ───────────────────────────────────────────────────────────────────
+
+async function getToken() {
+  const r = await fetch(`${CONFIG.url}/api/v3/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ company: CONFIG.company, user: CONFIG.user, pass: CONFIG.password }),
+  });
+  const data = await r.json();
+  if (!data.token) throw new Error(`Login fallido: ${JSON.stringify(data)}`);
+  return data.token;
 }
 
 async function crearClienteEnOperam(cliente) {
-  const FORM_URL = `${CONFIG.url}/sales/manage/customers.php?NewDebtor=1`;
-  const POST_URL = `${CONFIG.url}/sales/manage/customers.php`;
-  const AJAX_URL = `${CONFIG.url}/sales/inquiry/customers.ajax.php`;
-
   const CustName = cliente.CustName || '';
-  const cust_ref = cliente.cust_ref || '';
+  const cust_ref = cliente.cust_ref || toTitleCase(CustName);
   const notes = `Actividades económicas (CSF ${cliente.csf_fecha}):\n` +
     (cliente.actividades || []).map(a => `- ${a}`).join('\n');
 
-  const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext();
-  const page    = await context.newPage();
+  console.log(`[operam] Iniciando creación RFC: ${cliente.tax_id}`);
 
-  try {
-    console.log(`[operam] Iniciando creación RFC: ${cliente.tax_id}`);
-    await login(page);
+  const token = await getToken();
+  const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
 
-    // 1. Navegar al formulario de nuevo cliente (establece contexto de sesión)
-    const ajaxCheckUrl = `${AJAX_URL}?inactive=false&term=${encodeURIComponent(cliente.tax_id)}`;
-    await page.goto(FORM_URL, { waitUntil: 'domcontentloaded' });
-    console.log(`[operam] Formulario URL: ${page.url()}`);
-
-    // Verificar que estamos en el formulario, no en login
-    const hasCustName = await page.$('[name="CustName"]');
-    if (!hasCustName) {
-      const title = await page.title();
-      const fields = await page.evaluate(() =>
-        [...document.querySelectorAll('input[name],select[name]')].map(e => e.name).slice(0, 15)
-      );
-      return { error: 'Formulario no encontrado (sesión perdida)', diag: { title, url: page.url(), fields } };
-    }
-
-    // 3. Duplicate check + fill + POST + verify — todo en un solo evaluate
-    const result = await page.evaluate(async ({ ajaxCheckUrl, postUrl, cliente, defaults, CustName, cust_ref, notes }) => {
-      // 3a. Verificar duplicados
-      const ajaxR = await fetch(ajaxCheckUrl, { credentials: 'include' });
-      const ajaxText = await ajaxR.text();
-      let ajaxData = { results: [] };
-      if (ajaxText) {
-        try { ajaxData = JSON.parse(ajaxText); } catch(e) { /* no results */ }
-      }
-      const existente = ajaxData.results?.find(x => x.rfc === cliente.tax_id);
-      if (existente) return { duplicado: true, cliente_id: existente.id, nombre: existente.text };
-
-      // 3b. Llenar formulario y enviar
-      const form = [...document.querySelectorAll('form')].find(f => f.querySelector('[name="CustName"]'));
-      if (!form) return { error: 'Form no encontrado en evaluate' };
-
-      const fd = new FormData(form);
-      fd.set('CustName',            CustName);
-      fd.set('cust_ref',            cust_ref);
-      fd.set('tax_id',              cliente.tax_id);
-      fd.set('idcif',               cliente.idcif               || '');
-      fd.set('street',              cliente.street               || '');
-      fd.set('street_number',       cliente.street_number        || '');
-      fd.set('suite_number',        cliente.suite_number         || '');
-      fd.set('district',            cliente.district             || '');
-      fd.set('postal_code',         cliente.postal_code          || '');
-      fd.set('city',                cliente.city                 || '');
-      fd.set('state',               cliente.state                || '');
-      fd.set('country',             cliente.country              || 'México');
-      fd.set('phone',               cliente.phone                || '');
-      fd.set('email',               cliente.email                || '');
-      fd.set('salesman',            cliente.salesman             || '');
-      fd.set('segmento_id',         cliente.segmento_id          || '');
-      fd.set('cfdi_regimen_fiscal', cliente.cfdi_regimen_fiscal  || '612');
-      fd.set('notes',               notes);
-      fd.set('cfdi_form_payment',   defaults.cfdi_form_payment);
-      fd.set('timbrado_uso_cfdi',   cliente.timbrado_uso_cfdi    || defaults.timbrado_uso_cfdi);
-      fd.set('payment_terms',       defaults.payment_terms);
-      fd.set('location',            defaults.location);
-      fd.set('area',                defaults.area);
-      fd.delete('dimensiones_id[]');
-      fd.append('dimensiones_id[]', defaults.dimension1_id);
-      fd.append('dimensiones_id[]', defaults.dimension2_id);
-      fd.set('dimension1_id',       defaults.dimension1_id);
-      fd.set('dimension2_id',       defaults.dimension2_id);
-      fd.set('process',             'Añadir Nuevo Cliente');
-
-      const resp = await fetch(postUrl, { method: 'POST', credentials: 'include', body: fd });
-
-      // 3c. Verificar creación
-      const ajaxR2 = await fetch(ajaxCheckUrl, { credentials: 'include' });
-      const ajaxText2 = await ajaxR2.text();
-      let ajaxData2 = { results: [] };
-      if (ajaxText2) {
-        try { ajaxData2 = JSON.parse(ajaxText2); } catch(e) { /* ignore */ }
-      }
-      const creado = ajaxData2.results?.find(x => x.rfc === cliente.tax_id);
-      if (!creado) return { warn: true, mensaje: 'El POST se ejecutó pero el cliente no aparece. Verificar en Operam.', postStatus: resp.status };
-      return { duplicado: false, cliente_id: creado.id, nombre: creado.text };
-    }, { ajaxCheckUrl, postUrl: POST_URL, cliente, defaults: DEFAULTS, CustName, cust_ref, notes });
-
-    console.log(`[operam] Resultado:`, JSON.stringify(result).slice(0, 300));
-    return result;
-
-  } finally {
-    await browser.close();
+  // Verificar duplicado
+  const searchR = await fetch(
+    `${CONFIG.url}/api/v3/sales/customers?tax_id=${encodeURIComponent(cliente.tax_id)}`,
+    { headers }
+  );
+  const searchData = await searchR.json();
+  if (searchData.total > 0) {
+    const existente = searchData.data[0];
+    console.log(`[operam] Duplicado: ${existente.CustName} (ID ${existente.customer_id})`);
+    return { duplicado: true, cliente_id: existente.customer_id, nombre: existente.CustName };
   }
+
+  // Crear cliente
+  const body = {
+    cust_name:           CustName,
+    cust_ref:            cust_ref,
+    tax_id:              cliente.tax_id,
+    idcif:               cliente.idcif               || '',
+    street:              cliente.street               || '',
+    street_number:       cliente.street_number        || '',
+    suite_number:        cliente.suite_number         || '',
+    district:            cliente.district             || '',
+    postal_code:         cliente.postal_code          || '',
+    city:                cliente.city                 || '',
+    state:               cliente.state                || '',
+    country:             cliente.country              || 'México',
+    phone:               cliente.phone                || null,
+    email:               cliente.email                || null,
+    salesman:            cliente.salesman             ? Number(cliente.salesman) : null,
+    segmento_id:         cliente.segmento_id          ? Number(cliente.segmento_id) : null,
+    cfdi_regimen_fiscal: cliente.cfdi_regimen_fiscal  || '612',
+    timbrado_uso_cfdi:   cliente.timbrado_uso_cfdi    || DEFAULTS.timbrado_uso_cfdi,
+    notes:               notes,
+    cfdi_form_payment:   DEFAULTS.cfdi_form_payment,
+    cfdi_method_payment: DEFAULTS.cfdi_method_payment,
+    payment_terms:       DEFAULTS.payment_terms,
+    location:            DEFAULTS.location,
+    area:                DEFAULTS.area,
+    dimension_id:        DEFAULTS.dimension_id,
+    dimension2_id:       DEFAULTS.dimension2_id,
+    credit_limit:        DEFAULTS.credit_limit,
+    discount:            DEFAULTS.discount,
+    pymt_discount:       DEFAULTS.pymt_discount,
+  };
+
+  const r = await fetch(`${CONFIG.url}/api/v3/sales/customers`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  });
+  const data = await r.json();
+
+  if (!data.result) {
+    console.error(`[operam] Error al crear cliente:`, data);
+    return { error: data.messages?.join(', ') || 'Error desconocido', raw: data };
+  }
+
+  console.log(`[operam] Cliente creado: ID ${data.customer_id}`);
+  return { duplicado: false, cliente_id: data.customer_id, nombre: CustName };
 }
 
 // ─── Endpoint ────────────────────────────────────────────────────────────────
+
 app.post('/api/crear-cliente', async (req, res) => {
   const cliente = req.body;
 
