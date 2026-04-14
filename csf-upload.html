@@ -288,7 +288,7 @@
 </main>
 
 <!-- PDF.js desde CDN -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.9.155/pdf.min.js"></script>
 <script>
 // ─── Config ──────────────────────────────────────────────────────────────────
 const API_URL = 'https://operam-server.onrender.com/api/crear-cliente';
@@ -424,16 +424,19 @@ function parsearCSF(texto) {
 // ─── Leer PDF ─────────────────────────────────────────────────────────────────
 async function leerPDF(file) {
   pdfjsLib.GlobalWorkerOptions.workerSrc =
-    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.9.155/pdf.worker.min.js';
 
-  const buffer    = await file.arrayBuffer();
-  const pdf       = await pdfjsLib.getDocument({ data: buffer }).promise;
-  let textoTotal  = '';
+  const buffer = await file.arrayBuffer();
+  const pdf    = await pdfjsLib.getDocument({ data: buffer }).promise;
+  let textoTotal = '';
 
   for (let i = 1; i <= Math.min(pdf.numPages, 2); i++) {
     const page    = await pdf.getPage(i);
-    const content = await page.getTextContent();
-    textoTotal   += content.items.map(item => item.str).join(' ') + '\n';
+    const content = await page.getTextContent({ includeMarkedContent: true });
+    textoTotal   += content.items
+      .filter(item => item.str !== undefined)
+      .map(item => item.str)
+      .join(' ') + '\n';
   }
 
   return textoTotal;
