@@ -287,8 +287,12 @@
 
 </main>
 
-<!-- PDF.js desde CDN -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.9.155/pdf.min.js"></script>
+<!-- PDF.js 4.x como módulo ES -->
+<script type="module">
+  import * as pdfjsLib from 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.9.155/pdf.min.mjs';
+  window.pdfjsLib = pdfjsLib;
+  window.dispatchEvent(new Event('pdfjs-ready'));
+</script>
 <script>
 // ─── Config ──────────────────────────────────────────────────────────────────
 const API_URL = 'https://operam-server.onrender.com/api/crear-cliente';
@@ -422,17 +426,34 @@ function parsearCSF(texto) {
 }
 
 // ─── Leer PDF ─────────────────────────────────────────────────────────────────
+function esperarPdfJs() {
+  return new Promise(resolve => {
+    if (window.pdfjsLib) return resolve();
+    window.addEventListener('pdfjs-ready', () => resolve(), { once: true });
+  });
+}
+
 async function leerPDF(file) {
-  pdfjsLib.GlobalWorkerOptions.workerSrc =
-    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.9.155/pdf.worker.min.js';
+  await esperarPdfJs();
+
+  const PDFJS_BASE = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.9.155';
+  pdfjsLib.GlobalWorkerOptions.workerSrc = `${PDFJS_BASE}/pdf.worker.min.mjs`;
 
   const buffer = await file.arrayBuffer();
-  const pdf    = await pdfjsLib.getDocument({ data: buffer }).promise;
+  const pdf    = await pdfjsLib.getDocument({
+    data: buffer,
+    cMapUrl: `${PDFJS_BASE}/cmaps/`,
+    cMapPacked: true,
+    standardFontDataUrl: `${PDFJS_BASE}/standard_fonts/`,
+  }).promise;
+
+  console.log('[CSF] PDF cargado, páginas:', pdf.numPages);
   let textoTotal = '';
 
   for (let i = 1; i <= Math.min(pdf.numPages, 2); i++) {
     const page    = await pdf.getPage(i);
     const content = await page.getTextContent({ includeMarkedContent: true });
+    console.log(`[CSF] Página ${i}: ${content.items.length} items`);
     textoTotal   += content.items
       .filter(item => item.str !== undefined)
       .map(item => item.str)
