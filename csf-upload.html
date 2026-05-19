@@ -338,6 +338,18 @@
 <!-- Tesseract.js para OCR (último recurso si tampoco hay QR) -->
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script>
+// ─── Archivo PDF actual ───────────────────────────────────────────────────────
+let _pdfFile = null;
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 // ─── Config ──────────────────────────────────────────────────────────────────
 const API_BASE = 'https://operam-server.onrender.com';
 const API_URL  = `${API_BASE}/api/crear-cliente`;
@@ -770,6 +782,7 @@ pdfInput.addEventListener('change', e => {
 });
 
 async function procesarPDF(file) {
+  _pdfFile = file;
   setStatus('loading', 'Leyendo PDF...');
   setProgress(0, 'Cargando archivo...');
   uploadZone.style.display = 'none';
@@ -794,6 +807,7 @@ async function procesarPDF(file) {
 
 async function crearCliente() {
   const datos = leerForm();
+  if (_pdfFile) datos.pdf_base64 = await fileToBase64(_pdfFile);
   if (!datos.tax_id) {
     setStatus('error', 'El RFC es obligatorio.');
     return;

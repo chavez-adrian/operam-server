@@ -3,7 +3,7 @@ const express = require('express');
 const app  = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -65,6 +65,29 @@ function detectarRegimen(textoRegimen) {
 
 function toTitleCase(s) {
   return s.toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
+}
+
+// ─── Dropbox ─────────────────────────────────────────────────────────────────
+
+const DROPBOX_CSF_PATH = '/PELTRE NACIONAL/3.0 ADMINISTRACIÓN/CONTABILIDAD/PNA170810CF1/CONSTANCIA SITUACION FISCAL CLIENTES';
+
+async function subirCsfDropbox(pdfBase64, rfc, nombre) {
+  const token = process.env.DROPBOX_TOKEN;
+  if (!token) { console.warn('[dropbox] DROPBOX_TOKEN no configurado'); return; }
+  const nombreSano = nombre.replace(/[/\\:*?"<>|]/g, '').trim();
+  const path = `${DROPBOX_CSF_PATH}/${rfc} - ${nombreSano}.pdf`;
+  const r = await fetch('https://content.dropboxapi.com/2/files/upload', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/octet-stream',
+      'Dropbox-API-Arg': JSON.stringify({ path, mode: 'add', autorename: true }),
+    },
+    body: Buffer.from(pdfBase64, 'base64'),
+  });
+  if (!r.ok) throw new Error(`Dropbox ${r.status}: ${await r.text()}`);
+  const data = await r.json();
+  console.log(`[dropbox] Subido: ${data.path_display}`);
 }
 
 // ─── API v3 ───────────────────────────────────────────────────────────────────
@@ -167,6 +190,10 @@ app.post('/api/crear-cliente', async (req, res) => {
   try {
     const resultado = await crearClienteEnOperam(cliente);
     if (resultado.error) return res.status(500).json(resultado);
+    if (!resultado.duplicado && cliente.pdf_base64) {
+      subirCsfDropbox(cliente.pdf_base64, cliente.tax_id, cliente.CustName)
+        .catch(err => console.error('[dropbox] Error:', err.message));
+    }
     res.json({ ok: true, ...resultado });
   } catch (err) {
     console.error(err);
