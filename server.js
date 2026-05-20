@@ -1,7 +1,37 @@
 const express = require('express');
+const { Pool }  = require('pg');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
+
+// ─── Neon (log de CSF) ────────────────────────────────────────────────────────
+
+const pool = process.env.DATABASE_URL
+  ? new Pool({ connectionString: process.env.DATABASE_URL })
+  : null;
+
+if (pool) {
+  pool.query(`
+    CREATE TABLE IF NOT EXISTS csf_log (
+      id          SERIAL PRIMARY KEY,
+      created_at  TIMESTAMPTZ DEFAULT NOW(),
+      rfc         TEXT NOT NULL,
+      nombre      TEXT,
+      resultado   TEXT,
+      cliente_id  INTEGER,
+      dropbox_ok  BOOLEAN,
+      error_msg   TEXT
+    )
+  `).catch(err => console.error('[db] Error creando csf_log:', err.message));
+}
+
+function logCSF(rfc, nombre, resultado, cliente_id, dropbox_ok, error_msg) {
+  if (!pool) return;
+  pool.query(
+    'INSERT INTO csf_log (rfc, nombre, resultado, cliente_id, dropbox_ok, error_msg) VALUES ($1,$2,$3,$4,$5,$6)',
+    [rfc, nombre || null, resultado, cliente_id || null, dropbox_ok ?? null, error_msg || null]
+  ).catch(err => console.error('[db] Error insertando log:', err.message));
+}
 
 app.use(express.json({ limit: '10mb' }));
 app.use((req, res, next) => {
@@ -189,13 +219,23 @@ app.post('/api/crear-cliente', async (req, res) => {
 
   try {
     const resultado = await crearClienteEnOperam(cliente);
-    if (resultado.error) return res.status(500).json(resultado);
+    if (resultado.error) {
+      logCSF(cliente.tax_id, cliente.CustName, 'error', null, null, resultado.error);
+      return res.status(500).json(resultado);
+    }
     if (!resultado.duplicado && cliente.pdf_base64) {
       subirCsfDropbox(cliente.pdf_base64, cliente.tax_id, cliente.CustName)
-        .catch(err => console.error('[dropbox] Error:', err.message));
+        .then(() => logCSF(cliente.tax_id, cliente.CustName, 'creado', resultado.cliente_id, true, null))
+        .catch(err => {
+          console.error('[dropbox] Error:', err.message);
+          logCSF(cliente.tax_id, cliente.CustName, 'creado', resultado.cliente_id, false, err.message);
+        });
+    } else {
+      logCSF(cliente.tax_id, cliente.CustName, resultado.duplicado ? 'duplicado' : 'creado', resultado.cliente_id, null, null);
     }
     res.json({ ok: true, ...resultado });
   } catch (err) {
+    logCSF(cliente.tax_id, cliente.CustName || '', 'error', null, null, err.message);
     console.error(err);
     res.status(500).json({ error: err.message });
   }
@@ -247,7 +287,17 @@ app.post('/api/csf-from-url', async (req, res) => {
   }
 });
 
-// ─── Permitir CORS en POST ────────────────────────────────────────────────────
+// ─── Historial CSF ───────────────────────────────────────────────────────────
+
+app.get('/api/csf-log', async (req, res) => {
+  if (!pool) return res.status(503).json({ error: 'Base de datos no configurada' });
+  const { rows } = await pool.query(
+    'SELECT id, created_at, rfc, nombre, resultado, cliente_id, dropbox_ok, error_msg FROM csf_log ORDER BY created_at DESC LIMIT 200'
+  );
+  res.json(rows);
+});
+
+// ─── Health ───────────────────────────────────────────────────────────────────
 app.get('/health', (_, res) => res.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`Servidor corriendo en puerto ${PORT}`));
