@@ -12,24 +12,25 @@ const pool = process.env.DATABASE_URL
 
 if (pool) {
   pool.query(`
-    CREATE TABLE IF NOT EXISTS csf_log (
+    CREATE TABLE IF NOT EXISTS clientes_log (
       id          SERIAL PRIMARY KEY,
       created_at  TIMESTAMPTZ DEFAULT NOW(),
       rfc         TEXT NOT NULL,
       nombre      TEXT,
       resultado   TEXT,
       cliente_id  INTEGER,
+      fuente      TEXT,
       dropbox_ok  BOOLEAN,
       error_msg   TEXT
     )
-  `).catch(err => console.error('[db] Error creando csf_log:', err.message));
+  `).catch(err => console.error('[db] Error creando clientes_log:', err.message));
 }
 
-function logCSF(rfc, nombre, resultado, cliente_id, dropbox_ok, error_msg) {
+function logCliente(rfc, nombre, resultado, cliente_id, fuente, dropbox_ok, error_msg) {
   if (!pool) return;
   pool.query(
-    'INSERT INTO csf_log (rfc, nombre, resultado, cliente_id, dropbox_ok, error_msg) VALUES ($1,$2,$3,$4,$5,$6)',
-    [rfc, nombre || null, resultado, cliente_id || null, dropbox_ok ?? null, error_msg || null]
+    'INSERT INTO clientes_log (rfc, nombre, resultado, cliente_id, fuente, dropbox_ok, error_msg) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+    [rfc, nombre || null, resultado, cliente_id || null, fuente || null, dropbox_ok ?? null, error_msg || null]
   ).catch(err => console.error('[db] Error insertando log:', err.message));
 }
 
@@ -219,23 +220,25 @@ app.post('/api/crear-cliente', async (req, res) => {
 
   try {
     const resultado = await crearClienteEnOperam(cliente);
+    const fuente = cliente.fuente || (cliente.pdf_base64 ? 'operam-csf' : 'operam-manual');
     if (resultado.error) {
-      logCSF(cliente.tax_id, cliente.CustName, 'error', null, null, resultado.error);
+      logCliente(cliente.tax_id, cliente.CustName, 'error', null, fuente, null, resultado.error);
       return res.status(500).json(resultado);
     }
     if (!resultado.duplicado && cliente.pdf_base64) {
       subirCsfDropbox(cliente.pdf_base64, cliente.tax_id, cliente.CustName)
-        .then(() => logCSF(cliente.tax_id, cliente.CustName, 'creado', resultado.cliente_id, true, null))
+        .then(() => logCliente(cliente.tax_id, cliente.CustName, 'creado', resultado.cliente_id, fuente, true, null))
         .catch(err => {
           console.error('[dropbox] Error:', err.message);
-          logCSF(cliente.tax_id, cliente.CustName, 'creado', resultado.cliente_id, false, err.message);
+          logCliente(cliente.tax_id, cliente.CustName, 'creado', resultado.cliente_id, fuente, false, err.message);
         });
     } else {
-      logCSF(cliente.tax_id, cliente.CustName, resultado.duplicado ? 'duplicado' : 'creado', resultado.cliente_id, null, null);
+      logCliente(cliente.tax_id, cliente.CustName, resultado.duplicado ? 'duplicado' : 'creado', resultado.cliente_id, fuente, null, null);
     }
     res.json({ ok: true, ...resultado });
   } catch (err) {
-    logCSF(cliente.tax_id, cliente.CustName || '', 'error', null, null, err.message);
+    const fuente = cliente.fuente || (cliente.pdf_base64 ? 'operam-csf' : 'operam-manual');
+    logCliente(cliente.tax_id, cliente.CustName || '', 'error', null, fuente, null, err.message);
     console.error(err);
     res.status(500).json({ error: err.message });
   }
@@ -292,7 +295,7 @@ app.post('/api/csf-from-url', async (req, res) => {
 app.get('/api/csf-log', async (req, res) => {
   if (!pool) return res.status(503).json({ error: 'Base de datos no configurada' });
   const { rows } = await pool.query(
-    'SELECT id, created_at, rfc, nombre, resultado, cliente_id, dropbox_ok, error_msg FROM csf_log ORDER BY created_at DESC LIMIT 200'
+    'SELECT id, created_at, rfc, nombre, resultado, cliente_id, fuente, dropbox_ok, error_msg FROM clientes_log ORDER BY created_at DESC LIMIT 200'
   );
   res.json(rows);
 });

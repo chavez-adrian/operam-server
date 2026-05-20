@@ -807,7 +807,12 @@ async function procesarPDF(file) {
 
 async function crearCliente() {
   const datos = leerForm();
-  if (_pdfFile) datos.pdf_base64 = await fileToBase64(_pdfFile);
+  if (_pdfFile) {
+    datos.pdf_base64 = await fileToBase64(_pdfFile);
+    datos.fuente = 'operam-csf';
+  } else {
+    datos.fuente = 'operam-manual';
+  }
   if (!datos.tax_id) {
     setStatus('error', 'El RFC es obligatorio.');
     return;
