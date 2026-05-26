@@ -700,6 +700,19 @@ async function ocrPDF(pdf, totalPaginas) {
 }
 
 // ─── Poblar formulario ────────────────────────────────────────────────────────
+function buildEntregaPreFill(data) {
+  return {
+    f_del_name:   data.CustName     || '',
+    f_del_street: data.street       || '',
+    f_del_ext:    data.street_number || '',
+    f_del_int:    data.suite_number  || '',
+    f_del_colony: data.district     || '',
+    f_del_zip:    data.postal_code  || '',
+    f_del_city:   data.city         || '',
+    f_del_state:  data.state        || '',
+  };
+}
+
 function poblarForm(data) {
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
   set('f_CustName',            data.CustName);
@@ -717,6 +730,11 @@ function poblarForm(data) {
   set('f_cfdi_regimen_fiscal', data.cfdi_regimen_fiscal);
   set('f_notes',               data.notes);
   set('f_csf_fecha',           data.csf_fecha);
+
+  const entregaFields = buildEntregaPreFill(data);
+  for (const [id, val] of Object.entries(entregaFields)) {
+    set(id, val);
+  }
 }
 
 // ─── Leer formulario ──────────────────────────────────────────────────────────
