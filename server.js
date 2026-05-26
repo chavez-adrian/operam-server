@@ -1,5 +1,6 @@
 const express = require('express');
 const { Pool }  = require('pg');
+const { toTitleCase, editarBranch } = require('./server-helpers');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -94,17 +95,35 @@ function detectarRegimen(textoRegimen) {
   return encontrados[0];
 }
 
-function toTitleCase(s) {
-  return s.toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
-}
-
 // ─── Dropbox ─────────────────────────────────────────────────────────────────
 
 const DROPBOX_CSF_PATH = '/PELTRE NACIONAL/3.0 ADMINISTRACIÓN/CONTABILIDAD/PNA170810CF1/CONSTANCIA SITUACION FISCAL CLIENTES';
 
+let _dropboxAccessToken = null;
+let _dropboxTokenExpiry = 0;
+
+async function getDropboxToken() {
+  if (_dropboxAccessToken && Date.now() < _dropboxTokenExpiry) return _dropboxAccessToken;
+  const refreshToken = process.env.DROPBOX_REFRESH_TOKEN;
+  const appKey = process.env.DROPBOX_APP_KEY;
+  const appSecret = process.env.DROPBOX_APP_SECRET;
+  if (!refreshToken || !appKey || !appSecret) throw new Error('Faltan vars DROPBOX_REFRESH_TOKEN / DROPBOX_APP_KEY / DROPBOX_APP_SECRET');
+  const body = `grant_type=refresh_token&refresh_token=${encodeURIComponent(refreshToken)}&client_id=${encodeURIComponent(appKey)}&client_secret=${encodeURIComponent(appSecret)}`;
+  const r = await fetch('https://api.dropbox.com/oauth2/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  });
+  if (!r.ok) throw new Error(`Dropbox token refresh ${r.status}: ${await r.text()}`);
+  const data = await r.json();
+  _dropboxAccessToken = data.access_token;
+  _dropboxTokenExpiry = Date.now() + (data.expires_in - 60) * 1000;
+  console.log('[dropbox] Token renovado');
+  return _dropboxAccessToken;
+}
+
 async function subirCsfDropbox(pdfBase64, rfc, nombre) {
-  const token = process.env.DROPBOX_TOKEN;
-  if (!token) { console.warn('[dropbox] DROPBOX_TOKEN no configurado'); return; }
+  const token = await getDropboxToken();
   const nombreSano = nombre.replace(/[/\\:*?"<>|]/g, '').trim();
   const path = `${DROPBOX_CSF_PATH}/${rfc} - ${nombreSano}.pdf`;
   const r = await fetch('https://content.dropboxapi.com/2/files/upload', {
