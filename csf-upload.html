@@ -737,6 +737,22 @@ function poblarForm(data) {
   }
 }
 
+// ─── Sub-objeto entrega ───────────────────────────────────────────────────────
+function buildEntregaPayload(get) {
+  return {
+    br_name:       get('f_del_name'),
+    addr_street:   get('f_del_street'),
+    addr_exterior: get('f_del_ext'),
+    addr_interior: get('f_del_int'),
+    addr_colony:   get('f_del_colony'),
+    addr_zip:      get('f_del_zip'),
+    addr_city:     get('f_del_city'),
+    addr_state:    get('f_del_state'),
+    phone:         get('f_del_phone'),
+    email:         get('f_del_email'),
+  };
+}
+
 // ─── Leer formulario ──────────────────────────────────────────────────────────
 function leerForm() {
   const get = id => document.getElementById(id)?.value?.trim() || '';
@@ -844,6 +860,8 @@ async function procesarPDF(file) {
 
 async function crearCliente() {
   const datos = leerForm();
+  const get = id => document.getElementById(id)?.value?.trim() || '';
+  datos.entrega = buildEntregaPayload(get);
   if (_pdfFile) {
     datos.pdf_base64 = await fileToBase64(_pdfFile);
     datos.fuente = 'operam-csf';

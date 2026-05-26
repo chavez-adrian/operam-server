@@ -68,6 +68,49 @@ test('poblarForm llama a buildEntregaPreFill para setear campos del card de entr
   assert.ok(iteratesFields, 'poblarForm debe usar buildEntregaPreFill(data)');
 });
 
+// ─── Iteracion 5: buildEntregaPayload ────────────────────────────────────────
+
+test('buildEntregaPayload: construye sub-objeto entrega con valores de f_del_*', () => {
+  const match = html.match(/function buildEntregaPayload\(get\)\s*\{([\s\S]*?)\n\}/);
+  assert.ok(match, 'buildEntregaPayload no encontrada en csf-upload.html');
+
+  const fn = new Function('get', match[1] + '\n');
+
+  const values = {
+    f_del_name:   'Almacen Central',
+    f_del_street: 'Insurgentes Sur',
+    f_del_ext:    '1234',
+    f_del_int:    'Int 5',
+    f_del_colony: 'Del Valle',
+    f_del_zip:    '03100',
+    f_del_city:   'Benito Juarez',
+    f_del_state:  'CDMX',
+    f_del_phone:  '+52 55 1234 5678',
+    f_del_email:  'almacen@empresa.com',
+  };
+  const get = id => values[id] || '';
+
+  const result = fn(get);
+
+  assert.equal(result.br_name,       values.f_del_name,   'br_name <- f_del_name');
+  assert.equal(result.addr_street,   values.f_del_street, 'addr_street <- f_del_street');
+  assert.equal(result.addr_exterior, values.f_del_ext,    'addr_exterior <- f_del_ext');
+  assert.equal(result.addr_interior, values.f_del_int,    'addr_interior <- f_del_int');
+  assert.equal(result.addr_colony,   values.f_del_colony, 'addr_colony <- f_del_colony');
+  assert.equal(result.addr_zip,      values.f_del_zip,    'addr_zip <- f_del_zip');
+  assert.equal(result.addr_city,     values.f_del_city,   'addr_city <- f_del_city');
+  assert.equal(result.addr_state,    values.f_del_state,  'addr_state <- f_del_state');
+  assert.equal(result.phone,         values.f_del_phone,  'phone <- f_del_phone');
+  assert.equal(result.email,         values.f_del_email,  'email <- f_del_email');
+});
+
+test('crearCliente incluye sub-objeto entrega en el payload', () => {
+  const hasBuildEntregaPayload = html.includes('buildEntregaPayload');
+  assert.ok(hasBuildEntregaPayload, 'csf-upload.html debe definir buildEntregaPayload');
+  const usesInCrearCliente = html.includes('datos.entrega');
+  assert.ok(usesInCrearCliente, 'crearCliente debe asignar datos.entrega');
+});
+
 test('Card entrega: aparece ANTES de "Contacto y vendedor"', () => {
   const deliveryPos = html.indexOf('f_del_name');
   const contactoPos = html.indexOf('Contacto y vendedor');
