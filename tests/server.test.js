@@ -339,3 +339,65 @@ test('postCrearClienteHandler: pasa branchConfig vacio para cliente MX', async (
   assert.ok(result.ok);
   assert.deepEqual(capturedBranchConfig, {}, 'branchConfig debe ser vacio para MX');
 });
+
+// ─── Iteracion 3: buildClienteBody ───────────────────────────────────────────
+
+test('buildClienteBody: usa curr_code y area_pais del cliente cuando vienen', (t) => {
+  const { buildClienteBody } = require('../server-helpers.js');
+  const cliente = {
+    CustName: 'Acme LLC',
+    tax_id: 'XEXX010101000',
+    curr_code: 'USD',
+    area_pais: '5',
+    cfdi_regimen_fiscal: '610',
+    csf_fecha: '2026-01-01',
+    actividades: [],
+  };
+  const body = buildClienteBody(cliente, {});
+  assert.equal(body.curr_code, 'USD');
+  assert.equal(body.area, '5');
+  assert.equal(body.cfdi_regimen_fiscal, '610');
+});
+
+test('buildClienteBody: usa defaults MXN y area 1 cuando no vienen', (t) => {
+  const { buildClienteBody } = require('../server-helpers.js');
+  const cliente = {
+    CustName: 'Nacional SA',
+    tax_id: 'NAC010101ABC',
+    csf_fecha: '2026-01-01',
+    actividades: [],
+  };
+  const body = buildClienteBody(cliente, { area: 1, cfdi_regimen_fiscal: '612' });
+  assert.equal(body.curr_code, 'MXN');
+  assert.equal(body.area, 1);
+  assert.equal(body.cfdi_regimen_fiscal, '612');
+});
+
+test('buildClienteBody: prepend Tax ID en notes cuando viene invoice_tax_id', (t) => {
+  const { buildClienteBody } = require('../server-helpers.js');
+  const cliente = {
+    CustName: 'US Corp',
+    tax_id: 'XEXX010101000',
+    invoice_tax_id: 'EIN-12-3456789',
+    curr_code: 'USD',
+    area_pais: '5',
+    csf_fecha: '2026-01-01',
+    actividades: ['Comercio exterior'],
+  };
+  const body = buildClienteBody(cliente, { area: 1, cfdi_regimen_fiscal: '612' });
+  assert.ok(body.notes.startsWith('Tax ID: EIN-12-3456789\n'), 'notes debe empezar con Tax ID');
+  assert.ok(body.notes.includes('Actividades economicas'), 'notes debe incluir actividades');
+});
+
+test('buildClienteBody: sin invoice_tax_id, notes empieza con Actividades', (t) => {
+  const { buildClienteBody } = require('../server-helpers.js');
+  const cliente = {
+    CustName: 'MX SA',
+    tax_id: 'MXS010101ABC',
+    csf_fecha: '2026-01-01',
+    actividades: ['Manufactura'],
+  };
+  const body = buildClienteBody(cliente, { area: 1, cfdi_regimen_fiscal: '612' });
+  assert.ok(!body.notes.startsWith('Tax ID'), 'notes no debe tener Tax ID');
+  assert.ok(body.notes.includes('Actividades'), 'notes debe incluir actividades');
+});

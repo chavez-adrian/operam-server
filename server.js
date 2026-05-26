@@ -1,6 +1,6 @@
 const express = require('express');
 const { Pool }  = require('pg');
-const { toTitleCase, editarBranch, postCrearClienteHandler } = require('./server-helpers');
+const { toTitleCase, editarBranch, postCrearClienteHandler, buildClienteBody } = require('./server-helpers');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -154,11 +154,6 @@ async function getToken() {
 }
 
 async function crearClienteEnOperam(cliente) {
-  const CustName = cliente.CustName || '';
-  const cust_ref = cliente.cust_ref || toTitleCase(CustName);
-  const notes = `Actividades económicas (CSF ${cliente.csf_fecha}):\n` +
-    (cliente.actividades || []).map(a => `- ${a}`).join('\n');
-
   console.log(`[operam] Iniciando creación RFC: ${cliente.tax_id}`);
 
   const token = await getToken();
@@ -177,37 +172,7 @@ async function crearClienteEnOperam(cliente) {
   }
 
   // Crear cliente
-  const body = {
-    cust_name:           CustName,
-    cust_ref:            cust_ref,
-    tax_id:              cliente.tax_id,
-    idcif:               cliente.idcif               || '',
-    street:              cliente.street               || '',
-    street_number:       cliente.street_number        || '',
-    suite_number:        cliente.suite_number         || '',
-    district:            cliente.district             || '',
-    postal_code:         cliente.postal_code          || '',
-    city:                cliente.city                 || '',
-    state:               cliente.state                || '',
-    country:             cliente.country              || 'México',
-    phone:               cliente.phone                || null,
-    email:               cliente.email                || null,
-    salesman:            cliente.salesman             ? Number(cliente.salesman) : null,
-    segmento_id:         cliente.segmento_id          ? Number(cliente.segmento_id) : null,
-    cfdi_regimen_fiscal: cliente.cfdi_regimen_fiscal  || '612',
-    timbrado_uso_cfdi:   cliente.timbrado_uso_cfdi    || DEFAULTS.timbrado_uso_cfdi,
-    notes:               notes,
-    cfdi_form_payment:   DEFAULTS.cfdi_form_payment,
-    cfdi_method_payment: DEFAULTS.cfdi_method_payment,
-    payment_terms:       DEFAULTS.payment_terms,
-    location:            DEFAULTS.location,
-    area:                DEFAULTS.area,
-    dimension_id:        DEFAULTS.dimension_id,
-    dimension2_id:       DEFAULTS.dimension2_id,
-    credit_limit:        DEFAULTS.credit_limit,
-    discount:            DEFAULTS.discount,
-    pymt_discount:       DEFAULTS.pymt_discount,
-  };
+  const body = buildClienteBody(cliente, DEFAULTS);
 
   const r = await fetch(`${CONFIG.url}/api/v3/sales/customers`, {
     method: 'POST',

@@ -23,6 +23,48 @@ function toTitleCase(s) {
 
 const TEXT_FIELDS = ['br_name', 'addr_street', 'addr_interior', 'addr_colony', 'addr_city', 'addr_state'];
 
+function buildClienteBody(cliente, defaults) {
+  const CustName = cliente.CustName || '';
+  const cust_ref = cliente.cust_ref || toTitleCase(CustName);
+
+  const taxIdPrefix = cliente.invoice_tax_id ? `Tax ID: ${cliente.invoice_tax_id}\n` : '';
+  const notes = `${taxIdPrefix}Actividades economicas (CSF ${cliente.csf_fecha}):\n` +
+    (cliente.actividades || []).map(a => `- ${a}`).join('\n');
+
+  return {
+    cust_name:           CustName,
+    cust_ref:            cust_ref,
+    tax_id:              cliente.tax_id,
+    idcif:               cliente.idcif               || '',
+    street:              cliente.street               || '',
+    street_number:       cliente.street_number        || '',
+    suite_number:        cliente.suite_number         || '',
+    district:            cliente.district             || '',
+    postal_code:         cliente.postal_code          || '',
+    city:                cliente.city                 || '',
+    state:               cliente.state                || '',
+    country:             cliente.country              || 'Mexico',
+    phone:               cliente.phone                || null,
+    email:               cliente.email                || null,
+    salesman:            cliente.salesman             ? Number(cliente.salesman) : null,
+    segmento_id:         cliente.segmento_id          ? Number(cliente.segmento_id) : null,
+    cfdi_regimen_fiscal: cliente.cfdi_regimen_fiscal  || defaults.cfdi_regimen_fiscal || '612',
+    timbrado_uso_cfdi:   cliente.timbrado_uso_cfdi    || defaults.timbrado_uso_cfdi   || 'S01',
+    notes,
+    cfdi_form_payment:   defaults.cfdi_form_payment   || '99',
+    cfdi_method_payment: defaults.cfdi_method_payment || 'PPD',
+    payment_terms:       defaults.payment_terms       || 9,
+    location:            defaults.location            || '40',
+    area:                cliente.area_pais            || defaults.area || 1,
+    curr_code:           cliente.curr_code            || 'MXN',
+    dimension_id:        defaults.dimension_id        || 1,
+    dimension2_id:       defaults.dimension2_id       || 5,
+    credit_limit:        defaults.credit_limit        || 0,
+    discount:            defaults.discount            || 0,
+    pymt_discount:       defaults.pymt_discount       || 0,
+  };
+}
+
 async function editarBranch(token, customer_id, entrega, baseUrl, branchConfig) {
   const url = baseUrl || process.env.OPERAM_URL || 'https://peltrenacional.operam.pro';
   const headers = {
@@ -99,4 +141,4 @@ async function postCrearClienteHandler(cliente, deps) {
   return { ok: true, ...resultado };
 }
 
-module.exports = { toTitleCase, editarBranch, postCrearClienteHandler, getConfigPorPais };
+module.exports = { toTitleCase, editarBranch, postCrearClienteHandler, getConfigPorPais, buildClienteBody };
