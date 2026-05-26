@@ -43,4 +43,39 @@ async function editarBranch(token, customer_id, entrega, baseUrl) {
   return { ok: true };
 }
 
-module.exports = { toTitleCase, editarBranch };
+async function postCrearClienteHandler(cliente, deps) {
+  const { crearClienteEnOperam, editarBranch: _editarBranch, getToken, logCliente, subirCsfDropbox } = deps;
+
+  const fuente = cliente.fuente || (cliente.pdf_base64 ? 'operam-csf' : 'operam-manual');
+
+  const resultado = await crearClienteEnOperam(cliente);
+
+  if (resultado.error) {
+    logCliente(cliente.tax_id, cliente.CustName, 'error', null, fuente, null, resultado.error);
+    return resultado;
+  }
+
+  if (!resultado.duplicado && cliente.pdf_base64) {
+    subirCsfDropbox(cliente.pdf_base64, cliente.tax_id, cliente.CustName)
+      .then(() => logCliente(cliente.tax_id, cliente.CustName, 'creado', resultado.cliente_id, fuente, true, null))
+      .catch(err => {
+        console.error('[dropbox] Error:', err.message);
+        logCliente(cliente.tax_id, cliente.CustName, 'creado', resultado.cliente_id, fuente, false, err.message);
+      });
+  } else {
+    logCliente(cliente.tax_id, cliente.CustName, resultado.duplicado ? 'duplicado' : 'creado', resultado.cliente_id, fuente, null, null);
+  }
+
+  if (!resultado.duplicado && cliente.entrega) {
+    try {
+      const token = await getToken();
+      await _editarBranch(token, resultado.cliente_id, cliente.entrega);
+    } catch (err) {
+      console.error('[editarBranch] Error:', err.message);
+    }
+  }
+
+  return { ok: true, ...resultado };
+}
+
+module.exports = { toTitleCase, editarBranch, postCrearClienteHandler };

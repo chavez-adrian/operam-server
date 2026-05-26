@@ -86,3 +86,93 @@ test('editarBranch: lanza error si el GET no devuelve branches', async (t) => {
     /branch/i
   );
 });
+
+// ─── Iteracion 2: postCrearClienteHandler ─────────────────────────────────────
+
+test('postCrearClienteHandler: llama editarBranch cuando se pasa entrega', async (t) => {
+  const { postCrearClienteHandler } = require('../server-helpers.js');
+
+  let editarBranchCalled = false;
+  let editarBranchArgs = null;
+
+  const deps = {
+    crearClienteEnOperam: async () => ({ duplicado: false, cliente_id: 77, nombre: 'Test SA' }),
+    editarBranch: async (token, cliente_id, entrega) => {
+      editarBranchCalled = true;
+      editarBranchArgs = { token, cliente_id, entrega };
+      return { ok: true };
+    },
+    getToken: async () => 'jwt-token',
+    logCliente: () => {},
+    subirCsfDropbox: async () => {},
+  };
+
+  const body = {
+    tax_id: 'TST010101ABC',
+    CustName: 'Test SA de CV',
+    entrega: {
+      br_name: 'almacen central',
+      addr_street: 'insurgentes',
+      addr_exterior: '1',
+      addr_colony: 'del valle',
+      addr_city: 'cdmx',
+      addr_state: 'cdmx',
+      addr_zip: '03100',
+      phone: '+525500000000',
+      email: 'almacen@test.com',
+    },
+  };
+
+  const result = await postCrearClienteHandler(body, deps);
+
+  assert.ok(result.ok, 'debe retornar ok: true');
+  assert.equal(result.cliente_id, 77);
+  assert.ok(editarBranchCalled, 'debe haber llamado editarBranch');
+  assert.equal(editarBranchArgs.token, 'jwt-token');
+  assert.equal(editarBranchArgs.cliente_id, 77);
+  assert.equal(editarBranchArgs.entrega.br_name, 'almacen central');
+});
+
+test('postCrearClienteHandler: NO llama editarBranch si no hay entrega', async (t) => {
+  const { postCrearClienteHandler } = require('../server-helpers.js');
+
+  let editarBranchCalled = false;
+
+  const deps = {
+    crearClienteEnOperam: async () => ({ duplicado: false, cliente_id: 88, nombre: 'Otro SA' }),
+    editarBranch: async () => { editarBranchCalled = true; return { ok: true }; },
+    getToken: async () => 'jwt-token',
+    logCliente: () => {},
+    subirCsfDropbox: async () => {},
+  };
+
+  const body = { tax_id: 'OTR010101XYZ', CustName: 'Otro SA de CV' };
+
+  const result = await postCrearClienteHandler(body, deps);
+
+  assert.ok(result.ok);
+  assert.ok(!editarBranchCalled, 'NO debe llamar editarBranch si no hay entrega');
+});
+
+test('postCrearClienteHandler: error en editarBranch no falla el response', async (t) => {
+  const { postCrearClienteHandler } = require('../server-helpers.js');
+
+  const deps = {
+    crearClienteEnOperam: async () => ({ duplicado: false, cliente_id: 99, nombre: 'Falla SA' }),
+    editarBranch: async () => { throw new Error('timeout de red'); },
+    getToken: async () => 'jwt-token',
+    logCliente: () => {},
+    subirCsfDropbox: async () => {},
+  };
+
+  const body = {
+    tax_id: 'FLL010101ZZZ',
+    CustName: 'Falla SA de CV',
+    entrega: { br_name: 'sucursal', addr_street: 'calle 1' },
+  };
+
+  const result = await postCrearClienteHandler(body, deps);
+
+  assert.ok(result.ok, 'debe retornar ok: true aunque editarBranch falle');
+  assert.equal(result.cliente_id, 99);
+});

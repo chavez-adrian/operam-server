@@ -1,6 +1,6 @@
 const express = require('express');
 const { Pool }  = require('pg');
-const { toTitleCase, editarBranch } = require('./server-helpers');
+const { toTitleCase, editarBranch, postCrearClienteHandler } = require('./server-helpers');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -238,23 +238,17 @@ app.post('/api/crear-cliente', async (req, res) => {
   }
 
   try {
-    const resultado = await crearClienteEnOperam(cliente);
-    const fuente = cliente.fuente || (cliente.pdf_base64 ? 'operam-csf' : 'operam-manual');
+    const resultado = await postCrearClienteHandler(cliente, {
+      crearClienteEnOperam,
+      editarBranch,
+      getToken,
+      logCliente,
+      subirCsfDropbox,
+    });
     if (resultado.error) {
-      logCliente(cliente.tax_id, cliente.CustName, 'error', null, fuente, null, resultado.error);
       return res.status(500).json(resultado);
     }
-    if (!resultado.duplicado && cliente.pdf_base64) {
-      subirCsfDropbox(cliente.pdf_base64, cliente.tax_id, cliente.CustName)
-        .then(() => logCliente(cliente.tax_id, cliente.CustName, 'creado', resultado.cliente_id, fuente, true, null))
-        .catch(err => {
-          console.error('[dropbox] Error:', err.message);
-          logCliente(cliente.tax_id, cliente.CustName, 'creado', resultado.cliente_id, fuente, false, err.message);
-        });
-    } else {
-      logCliente(cliente.tax_id, cliente.CustName, resultado.duplicado ? 'duplicado' : 'creado', resultado.cliente_id, fuente, null, null);
-    }
-    res.json({ ok: true, ...resultado });
+    res.json(resultado);
   } catch (err) {
     const fuente = cliente.fuente || (cliente.pdf_base64 ? 'operam-csf' : 'operam-manual');
     logCliente(cliente.tax_id, cliente.CustName || '', 'error', null, fuente, null, err.message);
