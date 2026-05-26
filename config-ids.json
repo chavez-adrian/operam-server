@@ -1,0 +1,53 @@
+{
+  "tax_groups": {
+    "iva_16_nacional": "1",
+    "exento_extranjero": "2",
+    "ret_isr_10": "3",
+    "todos": "4",
+    "ret_iva_4": "5",
+    "ret_iva_1066": "6",
+    "ieps": "7"
+  },
+  "areas": {
+    "nacional_mx": "1",
+    "tiendas_digitales": "2",
+    "ventas_mostrador": "3",
+    "tiendas_fisicas": "4",
+    "usa": "5",
+    "otras_regiones": "6",
+    "canada": "7"
+  },
+  "accounts": {
+    "cxc_nacional": "105-01-001",
+    "cxc_extranjero": "105-02-001",
+    "ventas_exportacion": "401-07-000",
+    "descuento_ventas": "402-01-001",
+    "anticipo_exportacion": "401-07-000"
+  },
+  "branch_put_supported_fields": [
+    "customer_id", "br_name", "br_ref",
+    "tax_group_id", "area", "receivables_account",
+    "sales_account", "payment_discount_account", "advance_invoice_account",
+    "contact_name", "phone", "phone2", "fax", "email",
+    "addr_street", "addr_exterior", "addr_interior", "addr_colony",
+    "addr_city", "addr_state", "addr_zip", "addr_reference",
+    "inactive", "group_no", "notes", "dist_km"
+  ],
+  "contacts_structure": {
+    "action": "invoice | order | delivery",
+    "ref": "categoría visible en Operam (ej: 'Facturas', 'Gerente Sucursal')",
+    "name": "primer nombre del contacto",
+    "name2": "segundo nombre",
+    "phone": "teléfono",
+    "phone2": "teléfono alternativo",
+    "fax": "",
+    "email": "correo"
+  },
+  "contacts_add_mechanism": "PUT /api/v3/sales/customers/{id} con array contacts completo (incluyendo existentes + nuevo) — pendiente verificar en issue #3",
+  "notes": {
+    "areas_sin_endpoint": "No existe GET /api/v3/configs/areas. Valores obtenidos correlacionando branches endpoint (area numérica) con descriptions de customer list.",
+    "area_extranjero": "USA=5, Canadá=7, Otras regiones=6. Confirmado con Adrián 2026-05-26.",
+    "gl_accounts_sin_endpoint": "No existe endpoint de listado de cuentas contables. Códigos 401-07-000 y 105-02-001 provienen del plan aprobado.",
+    "put_branch_tax_group": "PUT branch con tax_group_id devuelve 200 OK. Verificado enviando mismos valores; cambio de valor real no testado en prod."
+  }
+}
