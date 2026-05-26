@@ -145,6 +145,7 @@
   .spinner { display: inline-block; animation: spin 1s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
+  .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .phone-row { display: flex; gap: 8px; }
   .phone-row select {
     flex: 0 0 115px;
@@ -248,6 +249,24 @@
       <h3>Actividades y notas</h3>
       <div class="field"><label>Notas (se copian a Operam)</label><textarea id="f_notes"></textarea></div>
       <div class="field"><label>Fecha CSF</label><input id="f_csf_fecha" type="text"></div>
+    </div>
+
+    <div class="card">
+      <h3>Domicilio de entrega</h3>
+      <div class="field"><label>Entregar a</label><input id="f_del_name" type="text" placeholder="Nombre del destinatario"></div>
+      <div class="field"><label>Calle</label><input id="f_del_street" type="text"></div>
+      <div class="row-2">
+        <div class="field"><label>Num. exterior</label><input id="f_del_ext" type="text"></div>
+        <div class="field"><label>Num. interior</label><input id="f_del_int" type="text" placeholder="Opcional"></div>
+      </div>
+      <div class="field"><label>Colonia</label><input id="f_del_colony" type="text"></div>
+      <div class="row-2">
+        <div class="field"><label>Codigo postal</label><input id="f_del_zip" type="text" inputmode="numeric"></div>
+        <div class="field"><label>Ciudad / Municipio</label><input id="f_del_city" type="text"></div>
+      </div>
+      <div class="field"><label>Estado</label><input id="f_del_state" type="text"></div>
+      <div class="field"><label>Telefono de entrega</label><input id="f_del_phone" type="tel" inputmode="tel"></div>
+      <div class="field"><label>Correo de entrega</label><input id="f_del_email" type="email" inputmode="email"></div>
     </div>
 
     <div class="card">
