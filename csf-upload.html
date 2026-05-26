@@ -195,7 +195,17 @@
       <h3>Datos del contribuyente</h3>
       <div class="field"><label>Nombre completo</label><input id="f_CustName" type="text"></div>
       <div class="field"><label>Nombre corto (en Operam)</label><input id="f_cust_ref" type="text"></div>
+      <div class="field">
+        <label>Pais</label>
+        <select id="f_pais">
+          <option value="MX" selected>Mexico</option>
+          <option value="US">EUA (Estados Unidos)</option>
+          <option value="CA">Canada</option>
+          <option value="other">Otro</option>
+        </select>
+      </div>
       <div class="field"><label>RFC</label><input id="f_tax_id" type="text"></div>
+      <div class="field" id="f_tax_id_ext_wrap" style="display:none"><label>Tax ID / EIN / VAT</label><input id="f_tax_id_ext" type="text" placeholder="EJ: 12-3456789"></div>
       <div class="field"><label>SAT IdCIF</label><input id="f_idcif" type="text"></div>
     </div>
 
@@ -210,7 +220,7 @@
       <div class="field"><label>Estado</label><input id="f_state" type="text"></div>
     </div>
 
-    <div class="card">
+    <div class="card card-fiscal">
       <h3>Fiscal</h3>
       <div class="field"><label>Régimen fiscal</label><input id="f_regimen_text" type="text" readonly style="color:#888;font-size:13px"></div>
       <div class="field"><label>Código régimen SAT</label><input id="f_cfdi_regimen_fiscal" type="text"></div>
@@ -763,6 +773,12 @@ function leerForm() {
     .filter(l => l.startsWith('- '))
     .map(l => l.slice(2));
 
+  const paisVal = get('f_pais') || 'MX';
+  const AREA_POR_PAIS_F = { MX: '1', US: '5', CA: '7' };
+  const area_pais = AREA_POR_PAIS_F[paisVal] || '6';
+  const curr_code = paisVal === 'MX' ? 'MXN' : 'USD';
+  const invoice_tax_id = get('f_tax_id_ext') || '';
+
   return {
     CustName:          get('f_CustName'),
     cust_ref:          get('f_cust_ref'),
@@ -775,7 +791,10 @@ function leerForm() {
     postal_code:       get('f_postal_code'),
     city:              get('f_city'),
     state:             get('f_state'),
-    country:           'México',
+    country:           paisVal,
+    curr_code,
+    area_pais,
+    invoice_tax_id,
     cfdi_regimen_fiscal: get('f_cfdi_regimen_fiscal'),
     actividades,
     csf_fecha:         get('f_csf_fecha'),
@@ -919,6 +938,31 @@ function resetForm() {
   setProgress(null);
   uploadZone.style.display = '';
 }
+
+// ─── Selector de pais: adapta formulario para clientes extranjeros ────────────
+const RFC_EXTRANJERO = 'XEXX010101000';
+
+document.addEventListener('DOMContentLoaded', () => {
+  const fPais = document.getElementById('f_pais');
+  if (!fPais) return;
+  fPais.addEventListener('change', () => {
+    const pais = fPais.value;
+    const esExtranjero = pais !== 'MX';
+    const rfcInput = document.getElementById('f_tax_id');
+    const taxIdExtWrap = document.getElementById('f_tax_id_ext_wrap');
+    const cardFiscal = document.querySelector('.card-fiscal');
+
+    if (esExtranjero) {
+      if (rfcInput) { rfcInput.value = RFC_EXTRANJERO; rfcInput.readOnly = true; }
+      if (taxIdExtWrap) taxIdExtWrap.style.display = '';
+      if (cardFiscal) cardFiscal.style.display = 'none';
+    } else {
+      if (rfcInput) { rfcInput.value = ''; rfcInput.readOnly = false; }
+      if (taxIdExtWrap) taxIdExtWrap.style.display = 'none';
+      if (cardFiscal) cardFiscal.style.display = '';
+    }
+  });
+});
 </script>
 </body>
 </html>

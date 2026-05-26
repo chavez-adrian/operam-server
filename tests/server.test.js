@@ -401,3 +401,35 @@ test('buildClienteBody: sin invoice_tax_id, notes empieza con Actividades', (t) 
   assert.ok(!body.notes.startsWith('Tax ID'), 'notes no debe tener Tax ID');
   assert.ok(body.notes.includes('Actividades'), 'notes debe incluir actividades');
 });
+
+// ─── Iteracion 4: csf-upload.html tiene selectores de pais y tax_id externo ──
+
+test('csf-upload.html: existe select#f_pais con opciones MX, US, CA, other', (t) => {
+  const fs = require('fs');
+  const html = fs.readFileSync('C:\\Users\\chave\\OneDrive\\Documents\\_Claude\\operam\\csf-upload.html', 'utf8');
+  assert.ok(html.includes('id="f_pais"'), 'debe existir select#f_pais');
+  assert.ok(html.includes('value="MX"'), 'debe tener opcion MX');
+  assert.ok(html.includes('value="US"'), 'debe tener opcion US');
+  assert.ok(html.includes('value="CA"'), 'debe tener opcion CA');
+});
+
+test('csf-upload.html: existe input#f_tax_id_ext para Tax ID extranjero', (t) => {
+  const fs = require('fs');
+  const html = fs.readFileSync('C:\\Users\\chave\\OneDrive\\Documents\\_Claude\\operam\\csf-upload.html', 'utf8');
+  assert.ok(html.includes('id="f_tax_id_ext"'), 'debe existir input#f_tax_id_ext');
+});
+
+test('csf-upload.html: leerForm incluye country, curr_code, area_pais en el payload', (t) => {
+  const fs = require('fs');
+  const html = fs.readFileSync('C:\\Users\\chave\\OneDrive\\Documents\\_Claude\\operam\\csf-upload.html', 'utf8');
+  assert.ok(html.includes('curr_code'), 'leerForm debe incluir curr_code');
+  assert.ok(html.includes('area_pais'), 'leerForm debe incluir area_pais');
+  assert.ok(html.includes('invoice_tax_id'), 'leerForm debe incluir invoice_tax_id');
+});
+
+test('csf-upload.html: event listener en f_pais pone RFC XEXX010101000 para extranjero', (t) => {
+  const fs = require('fs');
+  const html = fs.readFileSync('C:\\Users\\chave\\OneDrive\\Documents\\_Claude\\operam\\csf-upload.html', 'utf8');
+  assert.ok(html.includes('XEXX010101000'), 'debe usar RFC XEXX010101000 para extranjeros');
+  assert.ok(html.includes('f_pais'), 'debe referenciar f_pais en el event listener');
+});
