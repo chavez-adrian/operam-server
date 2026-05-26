@@ -433,3 +433,110 @@ test('csf-upload.html: event listener en f_pais pone RFC XEXX010101000 para extr
   assert.ok(html.includes('XEXX010101000'), 'debe usar RFC XEXX010101000 para extranjeros');
   assert.ok(html.includes('f_pais'), 'debe referenciar f_pais en el event listener');
 });
+
+// --- Iteracion 5: agregarContactoFactura -----------------------------------------
+
+test('agregarContactoFactura: hace GET de cliente y PUT con nuevo contacto Facturas', async (t) => {
+  const { agregarContactoFactura } = require('../server-helpers.js');
+
+  const TOKEN = 'test-tok';
+  const CUSTOMER_ID = 10;
+  const fetchCalls = [];
+
+  global.fetch = async (url, opts) => {
+    fetchCalls.push({ url, method: opts.method, body: opts.body });
+    if (opts.method === 'GET' && url.includes(`/api/v3/sales/customers/${CUSTOMER_ID}`)) {
+      return {
+        ok: true,
+        json: async () => ({
+          data: [{ cust_ref: 'TEST SA', contacts: [] }]
+        })
+      };
+    }
+    if (opts.method === 'PUT' && url.includes(`/api/v3/sales/customers/${CUSTOMER_ID}`)) {
+      return {
+        ok: true,
+        json: async () => ({ version: '3.26.20', cust_ref: 'TEST SA' })
+      };
+    }
+    throw new Error(`fetch inesperado: ${url} ${opts.method}`);
+  };
+
+  const result = await agregarContactoFactura(TOKEN, CUSTOMER_ID, 'facturas@test.com', 'https://test.operam.pro');
+
+  assert.deepEqual(result, { ok: true });
+
+  const getCall = fetchCalls.find(c => c.method === 'GET');
+  assert.ok(getCall, 'debe hacer GET al cliente');
+
+  const putCall = fetchCalls.find(c => c.method === 'PUT');
+  assert.ok(putCall, 'debe hacer PUT al cliente');
+
+  const putBody = JSON.parse(putCall.body);
+  assert.ok(Array.isArray(putBody.contacts), 'contacts debe ser array');
+  assert.equal(putBody.contacts.length, 1, 'debe haber un contacto');
+  assert.equal(putBody.contacts[0].name, 'Facturas');
+  assert.equal(putBody.contacts[0].email, 'facturas@test.com');
+  assert.equal(putBody.contacts[0].action, 'invoice');
+  assert.equal(putBody.contacts[0].ref, 'facturacion');
+});
+
+test('agregarContactoFactura: conserva contactos existentes y agrega el nuevo', async (t) => {
+  const { agregarContactoFactura } = require('../server-helpers.js');
+
+  const existingContact = {
+    id: '37', action: 'order', ref: 'Compras', name: 'Juan',
+    name2: '', phone: '', phone2: '', fax: '', email: 'juan@test.com',
+  };
+
+  global.fetch = async (url, opts) => {
+    if (opts.method === 'GET') {
+      return { ok: true, json: async () => ({ data: [{ cust_ref: 'TEST', contacts: [existingContact] }] }) };
+    }
+    if (opts.method === 'PUT') {
+      return { ok: true, json: async () => ({ version: '3.26.20', cust_ref: 'TEST' }) };
+    }
+    throw new Error(`fetch inesperado: ${url} ${opts.method}`);
+  };
+
+  let putBody;
+  const origFetch = global.fetch;
+  global.fetch = async (url, opts) => {
+    const r = await origFetch(url, opts);
+    if (opts.method === 'PUT') putBody = JSON.parse(opts.body);
+    return r;
+  };
+
+  await agregarContactoFactura('tok', 10, 'new@test.com', 'https://test.operam.pro');
+
+  assert.equal(putBody.contacts.length, 2, 'debe haber 2 contactos (existente + nuevo)');
+  assert.equal(putBody.contacts[0].ref, 'Compras', 'debe conservar el contacto existente');
+  assert.equal(putBody.contacts[1].name, 'Facturas', 'debe agregar el contacto Facturas');
+  assert.equal(putBody.contacts[1].email, 'new@test.com');
+});
+
+test('agregarContactoFactura: skip si ya existe contacto con name Facturas y action invoice', async (t) => {
+  const { agregarContactoFactura } = require('../server-helpers.js');
+
+  const existingFacturas = {
+    id: '202', action: 'invoice', ref: 'facturacion', name: 'Facturas',
+    name2: '', phone: '', phone2: '', fax: '', email: 'ya@existe.com',
+  };
+  let putCalled = false;
+
+  global.fetch = async (url, opts) => {
+    if (opts.method === 'GET') {
+      return { ok: true, json: async () => ({ data: [{ cust_ref: 'TEST', contacts: [existingFacturas] }] }) };
+    }
+    if (opts.method === 'PUT') {
+      putCalled = true;
+      return { ok: true, json: async () => ({}) };
+    }
+    throw new Error(`fetch inesperado: ${url} ${opts.method}`);
+  };
+
+  const result = await agregarContactoFactura('tok', 10, 'otro@email.com', 'https://test.operam.pro');
+
+  assert.deepEqual(result, { ok: true, skipped: true });
+  assert.ok(!putCalled, 'NO debe hacer PUT si ya existe contacto Facturas');
+});

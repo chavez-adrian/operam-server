@@ -105,6 +105,41 @@ async function editarBranch(token, customer_id, entrega, baseUrl, branchConfig) 
   return { ok: true };
 }
 
+async function agregarContactoFactura(token, customer_id, invoice_email, baseUrl) {
+  const url = baseUrl || process.env.OPERAM_URL || 'https://peltrenacional.operam.pro';
+  const headers = {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json',
+  };
+
+  const getR = await fetch(`${url}/api/v3/sales/customers/${customer_id}`, { method: 'GET', headers });
+  const getData = await getR.json();
+  const customer = getData.data && getData.data[0];
+  const contacts = (customer && customer.contacts) || [];
+
+  const yaExiste = contacts.some(c => c.name === 'Facturas' && c.action === 'invoice');
+  if (yaExiste) return { ok: true, skipped: true };
+
+  const nuevoContacto = {
+    action: 'invoice',
+    ref: 'facturacion',
+    name: 'Facturas',
+    name2: '',
+    email: invoice_email,
+    phone: '',
+    phone2: '',
+    fax: '',
+  };
+
+  await fetch(`${url}/api/v3/sales/customers/${customer_id}`, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify({ contacts: [...contacts, nuevoContacto] }),
+  });
+
+  return { ok: true };
+}
+
 async function postCrearClienteHandler(cliente, deps) {
   const { crearClienteEnOperam, editarBranch: _editarBranch, getToken, logCliente, subirCsfDropbox } = deps;
 
@@ -141,4 +176,4 @@ async function postCrearClienteHandler(cliente, deps) {
   return { ok: true, ...resultado };
 }
 
-module.exports = { toTitleCase, editarBranch, postCrearClienteHandler, getConfigPorPais, buildClienteBody };
+module.exports = { toTitleCase, editarBranch, agregarContactoFactura, postCrearClienteHandler, getConfigPorPais, buildClienteBody };
