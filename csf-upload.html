@@ -306,6 +306,10 @@
       </div>
       <div class="field"><label>Email</label><input id="f_email" type="email" inputmode="email"></div>
       <div class="field">
+        <label>Correo para factura <span style="opacity:0.5">(opcional)</span></label>
+        <input id="f_invoice_email" type="email" inputmode="email" placeholder="facturacion@empresa.com">
+      </div>
+      <div class="field">
         <label>Vendedor</label>
         <select id="f_salesman">
           <option value="">— Seleccionar —</option>
@@ -804,6 +808,7 @@ function leerForm() {
       return number ? `${code} ${number}` : '';
     })(),
     email:             get('f_email'),
+    invoice_email:     get('f_invoice_email'),
     salesman:            get('f_salesman'),
     segmento_id:         get('f_segmento_id'),
     timbrado_uso_cfdi:   get('f_timbrado_uso_cfdi'),

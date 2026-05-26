@@ -531,6 +531,22 @@ test('postCrearClienteHandler: error en agregarContactoFactura no falla el respo
   assert.equal(result.cliente_id, 77);
 });
 
+// --- Iteracion 7: csf-upload.html campo f_invoice_email --------------------------
+
+test('csf-upload.html: existe input#f_invoice_email en la card Contacto y vendedor', (t) => {
+  const fs = require('fs');
+  const html = fs.readFileSync('C:\\Users\\chave\\OneDrive\\Documents\\_Claude\\operam\\csf-upload.html', 'utf8');
+  assert.ok(html.includes('id="f_invoice_email"'), 'debe existir input#f_invoice_email');
+  assert.ok(html.includes('type="email"'), 'f_invoice_email debe ser tipo email');
+});
+
+test('csf-upload.html: leerForm incluye invoice_email en el payload', (t) => {
+  const fs = require('fs');
+  const html = fs.readFileSync('C:\\Users\\chave\\OneDrive\\Documents\\_Claude\\operam\\csf-upload.html', 'utf8');
+  assert.ok(html.includes('invoice_email'), 'leerForm debe incluir invoice_email');
+  assert.ok(html.includes('f_invoice_email'), 'leerForm debe leer f_invoice_email');
+});
+
 // --- Iteracion 5: agregarContactoFactura -----------------------------------------
 
 test('agregarContactoFactura: hace GET de cliente y PUT con nuevo contacto Facturas', async (t) => {
