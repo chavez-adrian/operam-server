@@ -220,3 +220,122 @@ test('postCrearClienteHandler: error en editarBranch no falla el response', asyn
   assert.ok(result.ok, 'debe retornar ok: true aunque editarBranch falle');
   assert.equal(result.cliente_id, 99);
 });
+
+// ─── Iteracion 2: editarBranch con branchConfig + postCrearClienteHandler pais ─
+
+test('editarBranch: mezcla branchConfig en el PUT body', async (t) => {
+  const { editarBranch } = require('../server-helpers.js');
+
+  const fetchCalls = [];
+  global.fetch = async (url, opts) => {
+    fetchCalls.push({ url, opts });
+    if (url.includes('/api/v3/sales/customers/')) {
+      return { ok: true, json: async () => ({ data: [{ branches: [{ branch_code: 'BR-EXT' }] }] }) };
+    }
+    if (url.includes('/api/v3/sales/branches/BR-EXT')) {
+      return { ok: true, json: async () => ({ result: true }) };
+    }
+    throw new Error(`fetch inesperado: ${url}`);
+  };
+
+  const branchConfig = {
+    tax_group_id: '2',
+    sales_account: '401-07-000',
+    receivables_account: '105-02-001',
+    payment_discount_account: '401-07-000',
+  };
+
+  await editarBranch('tok', 55, { br_name: 'acme corp', email: 'a@b.com' }, null, branchConfig);
+
+  const putCall = fetchCalls.find(c => c.url.includes('/api/v3/sales/branches/BR-EXT'));
+  assert.ok(putCall, 'debe hacer PUT al branch');
+  const body = JSON.parse(putCall.opts.body);
+  assert.equal(body.tax_group_id, '2', 'tax_group_id debe venir del branchConfig');
+  assert.equal(body.sales_account, '401-07-000');
+  assert.equal(body.receivables_account, '105-02-001');
+  assert.equal(body.br_name, 'Acme Corp', 'br_name aun debe estar en Title Case');
+});
+
+test('editarBranch: sin branchConfig funciona igual que antes', async (t) => {
+  const { editarBranch } = require('../server-helpers.js');
+
+  const fetchCalls = [];
+  global.fetch = async (url, opts) => {
+    fetchCalls.push({ url, opts });
+    if (url.includes('/api/v3/sales/customers/')) {
+      return { ok: true, json: async () => ({ data: [{ branches: [{ branch_code: 'BR-MX' }] }] }) };
+    }
+    if (url.includes('/api/v3/sales/branches/BR-MX')) {
+      return { ok: true, json: async () => ({ result: true }) };
+    }
+    throw new Error(`fetch inesperado: ${url}`);
+  };
+
+  const result = await editarBranch('tok', 10, { br_name: 'tienda local' });
+  assert.deepEqual(result, { ok: true });
+
+  const putCall = fetchCalls.find(c => c.url.includes('/api/v3/sales/branches/BR-MX'));
+  const body = JSON.parse(putCall.opts.body);
+  assert.equal(body.tax_group_id, undefined, 'no debe haber tax_group_id sin branchConfig');
+  assert.equal(body.br_name, 'Tienda Local');
+});
+
+test('postCrearClienteHandler: pasa branchConfig a editarBranch para cliente US', async (t) => {
+  const { postCrearClienteHandler } = require('../server-helpers.js');
+
+  let capturedBranchConfig;
+
+  const deps = {
+    crearClienteEnOperam: async () => ({ duplicado: false, cliente_id: 200, nombre: 'US Corp' }),
+    editarBranch: async (token, cliente_id, entrega, baseUrl, branchConfig) => {
+      capturedBranchConfig = branchConfig;
+      return { ok: true };
+    },
+    getToken: async () => 'jwt-token',
+    logCliente: () => {},
+    subirCsfDropbox: async () => {},
+  };
+
+  const body = {
+    tax_id: 'XEXX010101000',
+    CustName: 'US Corp LLC',
+    country: 'US',
+    entrega: { br_name: 'warehouse', addr_street: 'main st' },
+  };
+
+  const result = await postCrearClienteHandler(body, deps);
+
+  assert.ok(result.ok);
+  assert.equal(capturedBranchConfig.tax_group_id, '2');
+  assert.equal(capturedBranchConfig.sales_account, '401-07-000');
+  assert.equal(capturedBranchConfig.receivables_account, '105-02-001');
+});
+
+test('postCrearClienteHandler: pasa branchConfig vacio para cliente MX', async (t) => {
+  const { postCrearClienteHandler } = require('../server-helpers.js');
+
+  let capturedBranchConfig;
+
+  const deps = {
+    crearClienteEnOperam: async () => ({ duplicado: false, cliente_id: 201, nombre: 'MX SA' }),
+    editarBranch: async (token, cliente_id, entrega, baseUrl, branchConfig) => {
+      capturedBranchConfig = branchConfig;
+      return { ok: true };
+    },
+    getToken: async () => 'jwt-token',
+    logCliente: () => {},
+    subirCsfDropbox: async () => {},
+  };
+
+  const body = {
+    tax_id: 'MXS010101ABC',
+    CustName: 'MX SA de CV',
+    country: 'MX',
+    entrega: { br_name: 'sucursal mx' },
+  };
+
+  const result = await postCrearClienteHandler(body, deps);
+
+  assert.ok(result.ok);
+  assert.deepEqual(capturedBranchConfig, {}, 'branchConfig debe ser vacio para MX');
+});

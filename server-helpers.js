@@ -23,7 +23,7 @@ function toTitleCase(s) {
 
 const TEXT_FIELDS = ['br_name', 'addr_street', 'addr_interior', 'addr_colony', 'addr_city', 'addr_state'];
 
-async function editarBranch(token, customer_id, entrega, baseUrl) {
+async function editarBranch(token, customer_id, entrega, baseUrl, branchConfig) {
   const url = baseUrl || process.env.OPERAM_URL || 'https://peltrenacional.operam.pro';
   const headers = {
     'Authorization': `Bearer ${token}`,
@@ -45,6 +45,9 @@ async function editarBranch(token, customer_id, entrega, baseUrl) {
     } else {
       body[k] = v;
     }
+  }
+  if (branchConfig && Object.keys(branchConfig).length > 0) {
+    Object.assign(body, branchConfig);
   }
 
   const putR = await fetch(`${url}/api/v3/sales/branches/${branch_code}`, {
@@ -86,7 +89,8 @@ async function postCrearClienteHandler(cliente, deps) {
   if (!resultado.duplicado && cliente.entrega) {
     try {
       const token = await getToken();
-      await _editarBranch(token, resultado.cliente_id, cliente.entrega);
+      const { branchConfig } = getConfigPorPais(cliente.country);
+      await _editarBranch(token, resultado.cliente_id, cliente.entrega, null, branchConfig);
     } catch (err) {
       console.error('[editarBranch] Error:', err.message);
     }
