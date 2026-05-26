@@ -1,5 +1,22 @@
 'use strict';
 
+const CONFIG_BRANCH_EXTRANJERO = {
+  tax_group_id: '2',
+  sales_account: '401-07-000',
+  receivables_account: '105-02-001',
+  payment_discount_account: '401-07-000',
+};
+
+const AREA_POR_PAIS = { MX: '1', US: '5', CA: '7' };
+
+function getConfigPorPais(country) {
+  if (!country || country === 'MX') {
+    return { curr_code: 'MXN', area: '1', esExtranjero: false, branchConfig: {} };
+  }
+  const area = AREA_POR_PAIS[country] || '6';
+  return { curr_code: 'USD', area, esExtranjero: true, branchConfig: CONFIG_BRANCH_EXTRANJERO };
+}
+
 function toTitleCase(s) {
   return s.toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
 }
@@ -78,4 +95,4 @@ async function postCrearClienteHandler(cliente, deps) {
   return { ok: true, ...resultado };
 }
 
-module.exports = { toTitleCase, editarBranch, postCrearClienteHandler };
+module.exports = { toTitleCase, editarBranch, postCrearClienteHandler, getConfigPorPais };

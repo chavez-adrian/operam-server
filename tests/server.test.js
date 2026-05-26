@@ -154,6 +154,50 @@ test('postCrearClienteHandler: NO llama editarBranch si no hay entrega', async (
   assert.ok(!editarBranchCalled, 'NO debe llamar editarBranch si no hay entrega');
 });
 
+// ─── Iteracion 3: getConfigPorPais ───────────────────────────────────────────
+
+test('getConfigPorPais: MX retorna MXN, area 1, no extranjero, branchConfig vacio', (t) => {
+  const { getConfigPorPais } = require('../server-helpers.js');
+  const config = getConfigPorPais('MX');
+  assert.equal(config.curr_code, 'MXN');
+  assert.equal(config.area, '1');
+  assert.equal(config.esExtranjero, false);
+  assert.deepEqual(config.branchConfig, {});
+});
+
+test('getConfigPorPais: US retorna USD, area 5, esExtranjero, branchConfig con cuentas exportacion', (t) => {
+  const { getConfigPorPais } = require('../server-helpers.js');
+  const config = getConfigPorPais('US');
+  assert.equal(config.curr_code, 'USD');
+  assert.equal(config.area, '5');
+  assert.equal(config.esExtranjero, true);
+  assert.equal(config.branchConfig.tax_group_id, '2');
+  assert.equal(config.branchConfig.sales_account, '401-07-000');
+  assert.equal(config.branchConfig.receivables_account, '105-02-001');
+  assert.equal(config.branchConfig.payment_discount_account, '401-07-000');
+});
+
+test('getConfigPorPais: CA retorna USD, area 7, esExtranjero, branchConfig con cuentas exportacion', (t) => {
+  const { getConfigPorPais } = require('../server-helpers.js');
+  const config = getConfigPorPais('CA');
+  assert.equal(config.curr_code, 'USD');
+  assert.equal(config.area, '7');
+  assert.equal(config.esExtranjero, true);
+  assert.equal(config.branchConfig.tax_group_id, '2');
+  assert.equal(config.branchConfig.sales_account, '401-07-000');
+});
+
+test('getConfigPorPais: otro pais retorna USD, area 6, esExtranjero, branchConfig con cuentas exportacion', (t) => {
+  const { getConfigPorPais } = require('../server-helpers.js');
+  const config = getConfigPorPais('DE');
+  assert.equal(config.curr_code, 'USD');
+  assert.equal(config.area, '6');
+  assert.equal(config.esExtranjero, true);
+  assert.equal(config.branchConfig.tax_group_id, '2');
+});
+
+// ─── (Iteracion 3 existente) postCrearClienteHandler: error en editarBranch no falla el response ───
+
 test('postCrearClienteHandler: error en editarBranch no falla el response', async (t) => {
   const { postCrearClienteHandler } = require('../server-helpers.js');
 
