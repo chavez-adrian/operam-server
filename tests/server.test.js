@@ -434,6 +434,103 @@ test('csf-upload.html: event listener en f_pais pone RFC XEXX010101000 para extr
   assert.ok(html.includes('f_pais'), 'debe referenciar f_pais en el event listener');
 });
 
+// --- Iteracion 6: postCrearClienteHandler llama agregarContactoFactura -----------
+
+test('postCrearClienteHandler: llama agregarContactoFactura cuando invoice_email y no duplicado', async (t) => {
+  const { postCrearClienteHandler } = require('../server-helpers.js');
+
+  let agregarContactoFacturaCalled = false;
+  let agregarArgs = null;
+
+  const deps = {
+    crearClienteEnOperam: async () => ({ duplicado: false, cliente_id: 55, nombre: 'Test SA' }),
+    editarBranch: async () => ({ ok: true }),
+    agregarContactoFactura: async (token, cliente_id, invoice_email) => {
+      agregarContactoFacturaCalled = true;
+      agregarArgs = { token, cliente_id, invoice_email };
+      return { ok: true };
+    },
+    getToken: async () => 'jwt-tok',
+    logCliente: () => {},
+    subirCsfDropbox: async () => {},
+  };
+
+  const body = {
+    tax_id: 'TST010101ABC',
+    CustName: 'Test SA de CV',
+    invoice_email: 'facturas@test.com',
+  };
+
+  const result = await postCrearClienteHandler(body, deps);
+
+  assert.ok(result.ok);
+  assert.ok(agregarContactoFacturaCalled, 'debe llamar agregarContactoFactura');
+  assert.equal(agregarArgs.token, 'jwt-tok');
+  assert.equal(agregarArgs.cliente_id, 55);
+  assert.equal(agregarArgs.invoice_email, 'facturas@test.com');
+});
+
+test('postCrearClienteHandler: NO llama agregarContactoFactura si cliente es duplicado', async (t) => {
+  const { postCrearClienteHandler } = require('../server-helpers.js');
+
+  let called = false;
+
+  const deps = {
+    crearClienteEnOperam: async () => ({ duplicado: true, cliente_id: 55, nombre: 'Test SA' }),
+    editarBranch: async () => ({ ok: true }),
+    agregarContactoFactura: async () => { called = true; return { ok: true }; },
+    getToken: async () => 'jwt-tok',
+    logCliente: () => {},
+    subirCsfDropbox: async () => {},
+  };
+
+  const body = { tax_id: 'TST010101ABC', CustName: 'Test SA de CV', invoice_email: 'f@t.com' };
+  const result = await postCrearClienteHandler(body, deps);
+
+  assert.ok(result.ok);
+  assert.ok(!called, 'NO debe llamar agregarContactoFactura si duplicado');
+});
+
+test('postCrearClienteHandler: NO llama agregarContactoFactura si invoice_email vacio', async (t) => {
+  const { postCrearClienteHandler } = require('../server-helpers.js');
+
+  let called = false;
+
+  const deps = {
+    crearClienteEnOperam: async () => ({ duplicado: false, cliente_id: 66, nombre: 'New SA' }),
+    editarBranch: async () => ({ ok: true }),
+    agregarContactoFactura: async () => { called = true; return { ok: true }; },
+    getToken: async () => 'jwt-tok',
+    logCliente: () => {},
+    subirCsfDropbox: async () => {},
+  };
+
+  const body = { tax_id: 'NEW010101ABC', CustName: 'New SA de CV', invoice_email: '' };
+  const result = await postCrearClienteHandler(body, deps);
+
+  assert.ok(result.ok);
+  assert.ok(!called, 'NO debe llamar agregarContactoFactura si invoice_email vacio');
+});
+
+test('postCrearClienteHandler: error en agregarContactoFactura no falla el response', async (t) => {
+  const { postCrearClienteHandler } = require('../server-helpers.js');
+
+  const deps = {
+    crearClienteEnOperam: async () => ({ duplicado: false, cliente_id: 77, nombre: 'Fail SA' }),
+    editarBranch: async () => ({ ok: true }),
+    agregarContactoFactura: async () => { throw new Error('network timeout'); },
+    getToken: async () => 'jwt-tok',
+    logCliente: () => {},
+    subirCsfDropbox: async () => {},
+  };
+
+  const body = { tax_id: 'FAL010101ABC', CustName: 'Fail SA de CV', invoice_email: 'f@fail.com' };
+  const result = await postCrearClienteHandler(body, deps);
+
+  assert.ok(result.ok, 'debe retornar ok: true aunque agregarContactoFactura falle');
+  assert.equal(result.cliente_id, 77);
+});
+
 // --- Iteracion 5: agregarContactoFactura -----------------------------------------
 
 test('agregarContactoFactura: hace GET de cliente y PUT con nuevo contacto Facturas', async (t) => {

@@ -141,7 +141,7 @@ async function agregarContactoFactura(token, customer_id, invoice_email, baseUrl
 }
 
 async function postCrearClienteHandler(cliente, deps) {
-  const { crearClienteEnOperam, editarBranch: _editarBranch, getToken, logCliente, subirCsfDropbox } = deps;
+  const { crearClienteEnOperam, editarBranch: _editarBranch, agregarContactoFactura: _agregarContactoFactura, getToken, logCliente, subirCsfDropbox } = deps;
 
   const fuente = cliente.fuente || (cliente.pdf_base64 ? 'operam-csf' : 'operam-manual');
 
@@ -170,6 +170,15 @@ async function postCrearClienteHandler(cliente, deps) {
       await _editarBranch(token, resultado.cliente_id, cliente.entrega, null, branchConfig);
     } catch (err) {
       console.error('[editarBranch] Error:', err.message);
+    }
+  }
+
+  if (!resultado.duplicado && cliente.invoice_email) {
+    try {
+      const token = await getToken();
+      await _agregarContactoFactura(token, resultado.cliente_id, cliente.invoice_email);
+    } catch (err) {
+      console.error('[agregarContactoFactura] Error:', err.message);
     }
   }
 
