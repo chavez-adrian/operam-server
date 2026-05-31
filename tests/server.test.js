@@ -941,3 +941,63 @@ test('calcularDiff: trata null/undefined/vacio como string vacio para comparar',
 
   assert.deepEqual(diff, {});
 });
+
+// --- Issue #6 Iteracion 2: actualizarClienteEnOperam -----------------------------
+
+test('actualizarClienteEnOperam: hace PUT a /api/v3/sales/customers/:id con los campos del diff', async (t) => {
+  const { actualizarClienteEnOperam } = require('../server-helpers.js');
+
+  const fetchCalls = [];
+  global.fetch = async (url, opts) => {
+    fetchCalls.push({ url, opts });
+    return { ok: true, json: async () => ({ result: true }) };
+  };
+
+  const diff = { CustName: 'Nuevo Nombre SA', street: 'Reforma' };
+  const result = await actualizarClienteEnOperam('tok', 42, diff, 'https://test.operam.pro');
+
+  assert.deepEqual(result, { ok: true });
+
+  assert.equal(fetchCalls.length, 1, 'debe hacer exactamente un fetch');
+  const call = fetchCalls[0];
+  assert.ok(call.url.includes('/api/v3/sales/customers/42'), 'URL debe incluir el customer_id');
+  assert.equal(call.opts.method, 'PUT');
+  assert.equal(call.opts.headers['Authorization'], 'Bearer tok');
+
+  const body = JSON.parse(call.opts.body);
+  assert.equal(body.CustName, 'Nuevo Nombre SA');
+  assert.equal(body.street, 'Reforma');
+});
+
+test('actualizarClienteEnOperam: lanza error si Operam responde result: false', async (t) => {
+  const { actualizarClienteEnOperam } = require('../server-helpers.js');
+
+  global.fetch = async () => ({
+    ok: true,
+    json: async () => ({ result: false, messages: ['RFC invalido'] }),
+  });
+
+  await assert.rejects(
+    () => actualizarClienteEnOperam('tok', 42, { street: 'Calle X' }, 'https://test.operam.pro'),
+    /RFC invalido/
+  );
+});
+
+test('actualizarClienteEnOperam: usa OPERAM_URL del env cuando no se pasa baseUrl', async (t) => {
+  const { actualizarClienteEnOperam } = require('../server-helpers.js');
+
+  const original = process.env.OPERAM_URL;
+  process.env.OPERAM_URL = 'https://env-test.operam.pro';
+
+  const fetchCalls = [];
+  global.fetch = async (url, opts) => {
+    fetchCalls.push(url);
+    return { ok: true, json: async () => ({ result: true }) };
+  };
+
+  await actualizarClienteEnOperam('tok', 99, { CustName: 'Test' });
+
+  process.env.OPERAM_URL = original;
+
+  assert.ok(fetchCalls[0].startsWith('https://env-test.operam.pro'));
+});

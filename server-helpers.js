@@ -231,6 +231,27 @@ async function postCrearClienteHandler(cliente, deps) {
   return { ok: true, ...resultado };
 }
 
+async function actualizarClienteEnOperam(token, cliente_id, diff, baseUrl) {
+  const url = baseUrl || process.env.OPERAM_URL || 'https://peltrenacional.operam.pro';
+  const headers = {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json',
+  };
+
+  const r = await fetch(`${url}/api/v3/sales/customers/${cliente_id}`, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify(diff),
+  });
+  const data = await r.json();
+
+  if (!data.result) {
+    throw new Error(`actualizarCliente fallo: ${(data.messages || []).join(', ') || JSON.stringify(data)}`);
+  }
+
+  return { ok: true };
+}
+
 function calcularDiff(snapshot, formValues) {
   const diff = {};
   for (const key of Object.keys(snapshot)) {
@@ -244,4 +265,4 @@ function calcularDiff(snapshot, formValues) {
   return diff;
 }
 
-module.exports = { toTitleCase, editarBranch, agregarContactoFactura, postCrearClienteHandler, getConfigPorPais, buildClienteBody, buscarClientePorRFC, calcularDiff };
+module.exports = { toTitleCase, editarBranch, agregarContactoFactura, postCrearClienteHandler, getConfigPorPais, buildClienteBody, buscarClientePorRFC, calcularDiff, actualizarClienteEnOperam };

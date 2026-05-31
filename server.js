@@ -1,6 +1,6 @@
 const express = require('express');
 const { Pool }  = require('pg');
-const { toTitleCase, editarBranch, postCrearClienteHandler, buildClienteBody, buscarClientePorRFC } = require('./server-helpers');
+const { toTitleCase, editarBranch, postCrearClienteHandler, buildClienteBody, buscarClientePorRFC, actualizarClienteEnOperam } = require('./server-helpers');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -39,7 +39,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
   if (req.method === 'OPTIONS') return res.sendStatus(200);
   next();
 });
@@ -244,6 +244,32 @@ app.get('/api/buscar-cliente', async (req, res) => {
     res.json(resultado);
   } catch (err) {
     console.error('[buscar-cliente]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Actualizar cliente existente ───────────────────────────────────────────
+
+app.put('/api/actualizar-cliente/:id', async (req, res) => {
+  const cliente_id = req.params.id;
+  const diff = req.body;
+
+  if (!cliente_id) {
+    return res.status(400).json({ error: 'Falta el cliente_id en la URL' });
+  }
+  if (!diff || Object.keys(diff).length === 0) {
+    return res.status(400).json({ error: 'No se enviaron campos a actualizar' });
+  }
+  if (!CONFIG.user || !CONFIG.password) {
+    return res.status(500).json({ error: 'Credenciales de Operam no configuradas en el servidor' });
+  }
+
+  try {
+    const token = await getToken();
+    const resultado = await actualizarClienteEnOperam(token, cliente_id, diff, CONFIG.url);
+    res.json(resultado);
+  } catch (err) {
+    console.error('[actualizar-cliente]', err);
     res.status(500).json({ error: err.message });
   }
 });
