@@ -199,3 +199,51 @@ test('csf-upload.html: tiene API_ACTUALIZAR con ruta /api/actualizar-cliente', (
     'debe tener la constante o referencia a /api/actualizar-cliente'
   );
 });
+
+// --- Issue #6 Iteracion 4: logica JS del flujo de confirmacion ------------------
+
+test('csf-upload.html: define funcion mostrarPanelConfirmacion', () => {
+  assert.ok(
+    html.includes('function mostrarPanelConfirmacion'),
+    'debe definir la funcion mostrarPanelConfirmacion'
+  );
+});
+
+test('csf-upload.html: define funcion confirmarCambios', () => {
+  assert.ok(
+    html.includes('function confirmarCambios'),
+    'debe definir la funcion confirmarCambios'
+  );
+});
+
+test('csf-upload.html: define funcion cancelarConfirmacion', () => {
+  assert.ok(
+    html.includes('function cancelarConfirmacion'),
+    'debe definir la funcion cancelarConfirmacion'
+  );
+});
+
+test('csf-upload.html: crearCliente() verifica _clienteExistente para bifurcar flujo', () => {
+  assert.ok(
+    html.includes('_clienteExistente') && html.includes('mostrarPanelConfirmacion'),
+    'crearCliente debe verificar _clienteExistente y llamar mostrarPanelConfirmacion'
+  );
+});
+
+test('csf-upload.html: crearCliente() muestra "No hay cambios" si diff esta vacio', () => {
+  assert.ok(
+    html.includes('No hay cambios'),
+    'debe mostrar mensaje "No hay cambios" cuando no hay diff'
+  );
+});
+
+test('csf-upload.html: confirmarCambios llama a API_ACTUALIZAR con PUT', () => {
+  assert.ok(
+    html.includes('confirmarCambios') && html.includes('API_ACTUALIZAR'),
+    'confirmarCambios debe referenciar API_ACTUALIZAR'
+  );
+  assert.ok(
+    html.includes("method: 'PUT'") || html.includes('method:"PUT"'),
+    'confirmarCambios debe usar metodo PUT'
+  );
+});

@@ -955,7 +955,138 @@ async function procesarPDF(file) {
   }
 }
 
+// ─── Mapa de campos: formKey -> { label, snapshotKey } ───────────────────────
+// snapshotKey puede ser 'campo' (raiz) o 'branch.campo' (en branch)
+const CAMPOS_LEGIBLES = {
+  f_CustName:            { label: 'Nombre completo',       snapshotKey: 'CustName' },
+  f_street:              { label: 'Calle',                 snapshotKey: 'street' },
+  f_street_number:       { label: 'Num. exterior',         snapshotKey: 'street_number' },
+  f_suite_number:        { label: 'Num. interior',         snapshotKey: 'suite_number' },
+  f_district:            { label: 'Colonia',               snapshotKey: 'district' },
+  f_postal_code:         { label: 'Codigo postal',         snapshotKey: 'postal_code' },
+  f_city:                { label: 'Ciudad / Municipio',    snapshotKey: 'city' },
+  f_state:               { label: 'Estado',                snapshotKey: 'state' },
+  f_cfdi_regimen_fiscal: { label: 'Regimen fiscal',        snapshotKey: 'cfdi_regimen_fiscal' },
+  f_del_name:            { label: 'Entregar a',            snapshotKey: 'branch.br_name' },
+  f_del_street:          { label: 'Calle entrega',         snapshotKey: 'branch.addr_street' },
+  f_del_colony:          { label: 'Colonia entrega',       snapshotKey: 'branch.addr_colony' },
+  f_del_zip:             { label: 'CP entrega',            snapshotKey: 'branch.addr_zip' },
+  f_del_city:            { label: 'Ciudad entrega',        snapshotKey: 'branch.addr_city' },
+  f_del_state:           { label: 'Estado entrega',        snapshotKey: 'branch.addr_state' },
+  f_del_phone:           { label: 'Telefono entrega',      snapshotKey: 'branch.phone' },
+  f_del_email:           { label: 'Correo entrega',        snapshotKey: 'branch.email' },
+};
+
+// Mapa de snapshotKey a nombre de campo en la API de Operam para el PUT
+const SNAPSHOT_KEY_TO_API = {
+  'CustName':                'CustName',
+  'street':                  'street',
+  'street_number':           'street_number',
+  'suite_number':            'suite_number',
+  'district':                'district',
+  'postal_code':             'postal_code',
+  'city':                    'city',
+  'state':                   'state',
+  'cfdi_regimen_fiscal':     'cfdi_regimen_fiscal',
+  'branch.br_name':          'br_name',
+  'branch.addr_street':      'addr_street',
+  'branch.addr_colony':      'addr_colony',
+  'branch.addr_zip':         'addr_zip',
+  'branch.addr_city':        'addr_city',
+  'branch.addr_state':       'addr_state',
+  'branch.phone':            'phone',
+  'branch.email':            'email',
+};
+
+function calcularDiffFormulario() {
+  const get = id => document.getElementById(id)?.value?.trim() || '';
+  const snap = _clienteExistente.snapshot;
+  const diff = [];
+
+  for (const [fieldId, { label, snapshotKey }] of Object.entries(CAMPOS_LEGIBLES)) {
+    const valorActual = get(fieldId);
+    let valorAnterior;
+    if (snapshotKey.startsWith('branch.')) {
+      const branchField = snapshotKey.slice('branch.'.length);
+      valorAnterior = String((snap.branch && snap.branch[branchField]) || '').trim();
+    } else {
+      valorAnterior = String(snap[snapshotKey] == null ? '' : snap[snapshotKey]).trim();
+    }
+    if (valorAnterior !== valorActual) {
+      diff.push({ fieldId, label, snapshotKey, anterior: valorAnterior, nuevo: valorActual });
+    }
+  }
+  return diff;
+}
+
+function mostrarPanelConfirmacion(cambios) {
+  const lista = document.getElementById('listaCambios');
+  if (lista) {
+    lista.innerHTML = cambios.map(c =>
+      `<div><strong>${c.label}:</strong> "${c.anterior || '(vacio)'}" &rarr; "${c.nuevo || '(vacio)'}"</div>`
+    ).join('');
+  }
+  const panel = document.getElementById('panelConfirmacion');
+  if (panel) panel.classList.remove('hidden');
+  document.getElementById('btnCrear').style.display = 'none';
+}
+
+function cancelarConfirmacion() {
+  const panel = document.getElementById('panelConfirmacion');
+  if (panel) panel.classList.add('hidden');
+  document.getElementById('btnCrear').style.display = '';
+}
+
+async function confirmarCambios() {
+  const cambios = calcularDiffFormulario();
+  if (cambios.length === 0) return;
+
+  const payload = {};
+  for (const c of cambios) {
+    const apiKey = SNAPSHOT_KEY_TO_API[c.snapshotKey];
+    if (apiKey) payload[apiKey] = c.nuevo;
+  }
+
+  const cliente_id = _clienteExistente.cliente_id;
+  const btnConf = document.getElementById('btnConfirmar');
+  btnConf.disabled = true;
+  btnConf.textContent = 'Guardando...';
+
+  try {
+    const resp = await fetch(`${API_ACTUALIZAR}/${cliente_id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const result = await resp.json();
+
+    cancelarConfirmacion();
+
+    if (!resp.ok || result.error) {
+      setStatus('error', `Error al actualizar: ${result.error || 'Error desconocido'}`);
+    } else {
+      setStatus('ok', 'Datos del cliente actualizados en Operam.');
+    }
+  } catch (err) {
+    setStatus('error', `No se pudo conectar con el servidor: ${err.message}`);
+  } finally {
+    btnConf.disabled = false;
+    btnConf.textContent = 'Confirmar cambios';
+  }
+}
+
 async function crearCliente() {
+  // Si hay cliente existente, calcular diff y mostrar panel de confirmacion
+  if (_clienteExistente) {
+    const cambios = calcularDiffFormulario();
+    if (cambios.length === 0) {
+      setStatus('warn', 'No hay cambios que guardar.');
+      return;
+    }
+    mostrarPanelConfirmacion(cambios);
+    return;
+  }
+
   const datos = leerForm();
   const get = id => document.getElementById(id)?.value?.trim() || '';
   datos.entrega = buildEntregaPayload(get);
@@ -992,9 +1123,9 @@ async function crearCliente() {
     } else if (result.warn) {
       setStatus('warn', result.mensaje);
     } else if (result.duplicado) {
-      setStatus('warn', `El RFC ${datos.tax_id} ya está registrado en Operam (${result.nombre}). No se realizó ningún cambio.`);
+      setStatus('warn', `El RFC ${datos.tax_id} ya esta registrado en Operam (${result.nombre}). No se realizo ningun cambio.`);
     } else {
-      setStatus('ok', `Cliente creado: ${result.nombre} — ID ${result.cliente_id ?? '—'}`);
+      setStatus('ok', `Cliente creado: ${result.nombre} - ID ${result.cliente_id ?? '-'}`);
     }
   } catch (err) {
     if (err.name === 'AbortError') {
