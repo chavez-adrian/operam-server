@@ -231,4 +231,17 @@ async function postCrearClienteHandler(cliente, deps) {
   return { ok: true, ...resultado };
 }
 
-module.exports = { toTitleCase, editarBranch, agregarContactoFactura, postCrearClienteHandler, getConfigPorPais, buildClienteBody, buscarClientePorRFC };
+function calcularDiff(snapshot, formValues) {
+  const diff = {};
+  for (const key of Object.keys(snapshot)) {
+    if (!(key in formValues)) continue;
+    const anterior = String(snapshot[key] == null ? '' : snapshot[key]).trim();
+    const nuevo = String(formValues[key] == null ? '' : formValues[key]).trim();
+    if (anterior !== nuevo) {
+      diff[key] = { anterior, nuevo };
+    }
+  }
+  return diff;
+}
+
+module.exports = { toTitleCase, editarBranch, agregarContactoFactura, postCrearClienteHandler, getConfigPorPais, buildClienteBody, buscarClientePorRFC, calcularDiff };

@@ -859,3 +859,85 @@ test('agregarContactoFactura: skip si ya existe contacto con name Facturas y act
   assert.deepEqual(result, { ok: true, skipped: true });
   assert.ok(!putCalled, 'NO debe hacer PUT si ya existe contacto Facturas');
 });
+
+// --- Issue #6 Iteracion 1: calcularDiff ------------------------------------------
+
+test('calcularDiff: retorna campos que cambiaron con valores anterior y nuevo', (t) => {
+  const { calcularDiff } = require('../server-helpers.js');
+
+  const snapshot = {
+    CustName: 'Aceros SA de CV',
+    tax_id: 'ACE010101ABC',
+    street: 'Insurgentes Sur',
+    postal_code: '03100',
+  };
+
+  const formValues = {
+    CustName: 'Aceros SA de CV',
+    tax_id: 'ACE010101ABC',
+    street: 'Insurgentes Norte',
+    postal_code: '03200',
+  };
+
+  const diff = calcularDiff(snapshot, formValues);
+
+  assert.ok(!diff.CustName, 'CustName no cambio, no debe estar en diff');
+  assert.ok(!diff.tax_id, 'tax_id no cambio, no debe estar en diff');
+  assert.deepEqual(diff.street, { anterior: 'Insurgentes Sur', nuevo: 'Insurgentes Norte' });
+  assert.deepEqual(diff.postal_code, { anterior: '03100', nuevo: '03200' });
+});
+
+test('calcularDiff: retorna objeto vacio si no hay cambios', (t) => {
+  const { calcularDiff } = require('../server-helpers.js');
+
+  const snapshot = { CustName: 'Test SA', tax_id: 'TST010101ABC' };
+  const formValues = { CustName: 'Test SA', tax_id: 'TST010101ABC' };
+
+  const diff = calcularDiff(snapshot, formValues);
+
+  assert.deepEqual(diff, {});
+});
+
+test('calcularDiff: ignora campos que estan en snapshot pero no en formValues', (t) => {
+  const { calcularDiff } = require('../server-helpers.js');
+
+  const snapshot = { CustName: 'Test SA', extra: 'valor' };
+  const formValues = { CustName: 'Test SA' };
+
+  const diff = calcularDiff(snapshot, formValues);
+
+  assert.deepEqual(diff, {});
+});
+
+test('calcularDiff: ignora campos que estan en formValues pero no en snapshot', (t) => {
+  const { calcularDiff } = require('../server-helpers.js');
+
+  const snapshot = { CustName: 'Test SA' };
+  const formValues = { CustName: 'Test SA', nuevo_campo: 'valor' };
+
+  const diff = calcularDiff(snapshot, formValues);
+
+  assert.deepEqual(diff, {});
+});
+
+test('calcularDiff: compara por string trim (espacios no cuentan como cambio)', (t) => {
+  const { calcularDiff } = require('../server-helpers.js');
+
+  const snapshot = { CustName: 'Test SA' };
+  const formValues = { CustName: '  Test SA  ' };
+
+  const diff = calcularDiff(snapshot, formValues);
+
+  assert.deepEqual(diff, {});
+});
+
+test('calcularDiff: trata null/undefined/vacio como string vacio para comparar', (t) => {
+  const { calcularDiff } = require('../server-helpers.js');
+
+  const snapshot = { phone: null, email: undefined, notes: '' };
+  const formValues = { phone: '', email: '', notes: '' };
+
+  const diff = calcularDiff(snapshot, formValues);
+
+  assert.deepEqual(diff, {});
+});
