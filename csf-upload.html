@@ -179,6 +179,9 @@
     <p>Toca aquí o arrastra el PDF</p>
   </div>
 
+  <!-- Banner cliente duplicado -->
+  <div class="status warn hidden" id="bannerDuplicado"></div>
+
   <!-- Status superior -->
   <div class="status" id="status"></div>
 
@@ -374,6 +377,9 @@
 // ─── Archivo PDF actual ───────────────────────────────────────────────────────
 let _pdfFile = null;
 
+// ─── Estado cliente existente ─────────────────────────────────────────────────
+let _clienteExistente = null;
+
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -384,9 +390,10 @@ function fileToBase64(file) {
 }
 
 // ─── Config ──────────────────────────────────────────────────────────────────
-const API_BASE = 'https://operam-server.onrender.com';
-const API_URL  = `${API_BASE}/api/crear-cliente`;
-const API_QR   = `${API_BASE}/api/csf-from-url`;
+const API_BASE        = 'https://operam-server.onrender.com';
+const API_URL         = `${API_BASE}/api/crear-cliente`;
+const API_QR          = `${API_BASE}/api/csf-from-url`;
+const API_BUSCAR      = `${API_BASE}/api/buscar-cliente`;
 
 // ─── Mapa de regímenes ────────────────────────────────────────────────────────
 const REGIMENES = {
@@ -815,6 +822,44 @@ function leerForm() {
   };
 }
 
+// ─── Buscar cliente existente por RFC ────────────────────────────────────────
+async function buscarClienteExistente(rfc) {
+  try {
+    const r = await fetch(`${API_BUSCAR}?rfc=${encodeURIComponent(rfc)}`);
+    if (!r.ok) return null;
+    const data = await r.json();
+    return data.encontrado ? data : null;
+  } catch (err) {
+    console.warn('[buscar-cliente] Error:', err.message);
+    return null;
+  }
+}
+
+function poblarFormDesdeOperam(datos) {
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
+  set('f_CustName',            datos.CustName);
+  set('f_cust_ref',            datos.CustName);
+  set('f_tax_id',              datos.tax_id);
+  set('f_street',              datos.street);
+  set('f_street_number',       datos.street_number);
+  set('f_suite_number',        datos.suite_number);
+  set('f_district',            datos.district);
+  set('f_postal_code',         datos.postal_code);
+  set('f_city',                datos.city);
+  set('f_state',               datos.state);
+  set('f_cfdi_regimen_fiscal', datos.cfdi_regimen_fiscal);
+
+  const b = datos.branch || {};
+  set('f_del_name',   b.br_name    || datos.CustName);
+  set('f_del_street', b.addr_street || datos.street);
+  set('f_del_colony', b.addr_colony || datos.district);
+  set('f_del_zip',    b.addr_zip    || datos.postal_code);
+  set('f_del_city',   b.addr_city   || datos.city);
+  set('f_del_state',  b.addr_state  || datos.state);
+  set('f_del_phone',  b.phone);
+  set('f_del_email',  b.email);
+}
+
 // ─── Mostrar status (arriba y abajo) ──────────────────────────────────────────
 function setStatus(tipo, msg) {
   ['status', 'statusBottom'].forEach(id => {
@@ -860,6 +905,11 @@ pdfInput.addEventListener('change', e => {
 
 async function procesarPDF(file) {
   _pdfFile = file;
+  _clienteExistente = null;
+  const banner = document.getElementById('bannerDuplicado');
+  if (banner) { banner.className = 'status warn hidden'; banner.textContent = ''; }
+  const btn = document.getElementById('btnCrear');
+  if (btn) btn.textContent = 'Crear cliente en Operam';
   setStatus('loading', 'Leyendo PDF...');
   setProgress(0, 'Cargando archivo...');
   uploadZone.style.display = 'none';
@@ -869,11 +919,23 @@ async function procesarPDF(file) {
     poblarForm(data);
     document.getElementById('formSection').classList.remove('hidden');
     setProgress(null);
-    setStatus('', '');
     if (!data.tax_id) {
       setStatus('error', 'No se pudo extraer el RFC. Verifica los campos manualmente.');
     } else {
-      setStatus('ok', `Datos extraídos correctamente. RFC: ${data.tax_id}`);
+      setStatus('loading', `RFC ${data.tax_id} extraido. Verificando en Operam...`);
+      const existente = await buscarClienteExistente(data.tax_id);
+      if (existente) {
+        _clienteExistente = { cliente_id: existente.cliente_id, snapshot: Object.assign({}, existente) };
+        poblarFormDesdeOperam(existente);
+        if (banner) {
+          banner.className = 'status warn';
+          banner.textContent = `Este cliente ya esta registrado en Operam (ID ${existente.cliente_id} — ${existente.CustName}). Sus datos han sido cargados.`;
+        }
+        if (btn) btn.textContent = 'Actualizar cliente';
+        setStatus('', '');
+      } else {
+        setStatus('ok', `Datos extraidos correctamente. RFC: ${data.tax_id}`);
+      }
     }
   } catch (err) {
     setProgress(null);
@@ -937,8 +999,14 @@ async function crearCliente() {
 }
 
 function resetForm() {
+  _pdfFile = null;
+  _clienteExistente = null;
   pdfInput.value = '';
   document.getElementById('formSection').classList.add('hidden');
+  const banner = document.getElementById('bannerDuplicado');
+  if (banner) { banner.className = 'status warn hidden'; banner.textContent = ''; }
+  const btn = document.getElementById('btnCrear');
+  if (btn) btn.textContent = 'Crear cliente en Operam';
   setStatus('', '');
   setProgress(null);
   uploadZone.style.display = '';

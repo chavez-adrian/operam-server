@@ -1,6 +1,6 @@
 const express = require('express');
 const { Pool }  = require('pg');
-const { toTitleCase, editarBranch, postCrearClienteHandler, buildClienteBody } = require('./server-helpers');
+const { toTitleCase, editarBranch, postCrearClienteHandler, buildClienteBody, buscarClientePorRFC } = require('./server-helpers');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -39,7 +39,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   if (req.method === 'OPTIONS') return res.sendStatus(200);
   next();
 });
@@ -168,7 +168,13 @@ async function crearClienteEnOperam(cliente) {
   if (searchData.total > 0) {
     const existente = searchData.data[0];
     console.log(`[operam] Duplicado: ${existente.CustName} (ID ${existente.customer_id})`);
-    return { duplicado: true, cliente_id: existente.customer_id, nombre: existente.CustName };
+    const datosCompletos = await buscarClientePorRFC(token, cliente.tax_id, CONFIG.url);
+    return {
+      duplicado: true,
+      cliente_id: existente.customer_id,
+      nombre: existente.CustName,
+      ...datosCompletos,
+    };
   }
 
   // Crear cliente
@@ -218,6 +224,26 @@ app.post('/api/crear-cliente', async (req, res) => {
     const fuente = cliente.fuente || (cliente.pdf_base64 ? 'operam-csf' : 'operam-manual');
     logCliente(cliente.tax_id, cliente.CustName || '', 'error', null, fuente, null, err.message);
     console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Buscar cliente por RFC ──────────────────────────────────────────────────
+
+app.get('/api/buscar-cliente', async (req, res) => {
+  const rfc = req.query.rfc;
+  if (!rfc) {
+    return res.status(400).json({ error: 'Falta el parametro rfc' });
+  }
+  if (!CONFIG.user || !CONFIG.password) {
+    return res.status(500).json({ error: 'Credenciales de Operam no configuradas en el servidor' });
+  }
+  try {
+    const token = await getToken();
+    const resultado = await buscarClientePorRFC(token, rfc, CONFIG.url);
+    res.json(resultado);
+  } catch (err) {
+    console.error('[buscar-cliente]', err);
     res.status(500).json({ error: err.message });
   }
 });

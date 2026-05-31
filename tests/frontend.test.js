@@ -111,6 +111,40 @@ test('crearCliente incluye sub-objeto entrega en el payload', () => {
   assert.ok(usesInCrearCliente, 'crearCliente debe asignar datos.entrega');
 });
 
+// --- Issue #5: Guard RFC duplicado ---
+
+test('csf-upload.html: llama a /api/buscar-cliente despues de parsear RFC', () => {
+  assert.ok(
+    html.includes('/api/buscar-cliente'),
+    'csf-upload.html debe llamar a /api/buscar-cliente'
+  );
+  assert.ok(
+    html.includes('buscarClienteExistente') || html.includes('buscar-cliente'),
+    'csf-upload.html debe tener logica de busqueda de cliente existente'
+  );
+});
+
+test('csf-upload.html: tiene banner para cliente duplicado (id="bannerDuplicado")', () => {
+  assert.ok(
+    html.includes('id="bannerDuplicado"'),
+    'debe existir elemento con id="bannerDuplicado"'
+  );
+});
+
+test('csf-upload.html: tiene variable _clienteExistente en el scope', () => {
+  assert.ok(
+    html.includes('_clienteExistente'),
+    'debe haber variable _clienteExistente en el scope'
+  );
+});
+
+test('csf-upload.html: boton btnCrear cambia a "Actualizar cliente" cuando hay duplicado', () => {
+  assert.ok(
+    html.includes('Actualizar cliente'),
+    'debe haber texto "Actualizar cliente" para el boton cuando hay duplicado'
+  );
+});
+
 test('Card entrega: aparece ANTES de "Contacto y vendedor"', () => {
   const deliveryPos = html.indexOf('f_del_name');
   const contactoPos = html.indexOf('Contacto y vendedor');
