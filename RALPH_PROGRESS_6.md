@@ -26,5 +26,5 @@
 - calcularDiffFormulario() con CAMPOS_LEGIBLES y SNAPSHOT_KEY_TO_API mapas
 - 6 tests frontend
 
-## Proxima accion
-Push a master (todas las tareas del issue completadas)
+## Estado final
+76 tests, 0 fallas. Push a master completado.
