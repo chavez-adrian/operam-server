@@ -592,7 +592,108 @@ test('agregarContactoFactura: usa OPERAM_URL de process.env cuando no se pasa ba
   assert.ok(getCall.url.startsWith('https://env.operam.pro'), 'debe usar OPERAM_URL del env');
 });
 
-// --- Iteracion 5: agregarContactoFactura -----------------------------------------
+// --- Iteracion 5 (issue #5): buscarClientePorRFC ---------------------------------
+
+test('buscarClientePorRFC: devuelve datos completos del cliente y primer branch', async (t) => {
+  const { buscarClientePorRFC } = require('../server-helpers.js');
+
+  const TOKEN = 'test-tok';
+  const RFC = 'TST010101ABC';
+
+  global.fetch = async (url, opts) => {
+    if (url.includes('/api/v3/sales/customers') && url.includes('tax_id=')) {
+      return {
+        ok: true,
+        json: async () => ({
+          total: 1,
+          data: [{
+            customer_id: 42,
+            CustName: 'Test SA de CV',
+            tax_id: RFC,
+            street: 'Insurgentes Sur',
+            street_number: '1234',
+            suite_number: 'Int 5',
+            district: 'Del Valle',
+            postal_code: '03100',
+            city: 'Benito Juarez',
+            state: 'CDMX',
+            cfdi_regimen_fiscal: '601',
+            branches: [{
+              br_name: 'Test SA de CV',
+              addr_street: 'Insurgentes Sur',
+              addr_colony: 'Del Valle',
+              addr_zip: '03100',
+              addr_city: 'Benito Juarez',
+              addr_state: 'CDMX',
+              phone: '+5255123456',
+              email: 'contacto@test.com',
+            }],
+          }],
+        }),
+      };
+    }
+    throw new Error('fetch inesperado: ' + url);
+  };
+
+  const result = await buscarClientePorRFC(TOKEN, RFC, 'https://test.operam.pro');
+
+  assert.ok(result.encontrado, 'debe retornar encontrado: true');
+  assert.equal(result.cliente_id, 42);
+  assert.equal(result.CustName, 'Test SA de CV');
+  assert.equal(result.tax_id, RFC);
+  assert.equal(result.street, 'Insurgentes Sur');
+  assert.equal(result.street_number, '1234');
+  assert.equal(result.suite_number, 'Int 5');
+  assert.equal(result.district, 'Del Valle');
+  assert.equal(result.postal_code, '03100');
+  assert.equal(result.city, 'Benito Juarez');
+  assert.equal(result.state, 'CDMX');
+  assert.equal(result.cfdi_regimen_fiscal, '601');
+  assert.equal(result.branch.br_name, 'Test SA de CV');
+  assert.equal(result.branch.addr_street, 'Insurgentes Sur');
+  assert.equal(result.branch.addr_colony, 'Del Valle');
+  assert.equal(result.branch.addr_zip, '03100');
+  assert.equal(result.branch.addr_city, 'Benito Juarez');
+  assert.equal(result.branch.addr_state, 'CDMX');
+  assert.equal(result.branch.phone, '+5255123456');
+  assert.equal(result.branch.email, 'contacto@test.com');
+});
+
+test('buscarClientePorRFC: devuelve encontrado: false cuando no hay match', async (t) => {
+  const { buscarClientePorRFC } = require('../server-helpers.js');
+
+  global.fetch = async (url) => {
+    return {
+      ok: true,
+      json: async () => ({ total: 0, data: [] }),
+    };
+  };
+
+  const result = await buscarClientePorRFC('tok', 'RFC000000000', 'https://test.operam.pro');
+
+  assert.equal(result.encontrado, false);
+});
+
+test('buscarClientePorRFC: usa OPERAM_URL del env cuando no se pasa baseUrl', async (t) => {
+  const { buscarClientePorRFC } = require('../server-helpers.js');
+
+  const originalUrl = process.env.OPERAM_URL;
+  process.env.OPERAM_URL = 'https://env-test.operam.pro';
+
+  const fetchCalls = [];
+  global.fetch = async (url, opts) => {
+    fetchCalls.push(url);
+    return { ok: true, json: async () => ({ total: 0, data: [] }) };
+  };
+
+  await buscarClientePorRFC('tok', 'RFC000000000');
+
+  process.env.OPERAM_URL = originalUrl;
+
+  assert.ok(fetchCalls[0].startsWith('https://env-test.operam.pro'), 'debe usar OPERAM_URL del env');
+});
+
+// --- Iteracion 5 (issue #5): agregarContactoFactura -----------------------------------------
 
 test('agregarContactoFactura: hace GET de cliente y PUT con nuevo contacto Facturas', async (t) => {
   const { agregarContactoFactura } = require('../server-helpers.js');

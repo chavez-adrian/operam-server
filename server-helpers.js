@@ -140,6 +140,52 @@ async function agregarContactoFactura(token, customer_id, invoice_email, baseUrl
   return { ok: true };
 }
 
+async function buscarClientePorRFC(token, rfc, baseUrl) {
+  const url = baseUrl || process.env.OPERAM_URL || 'https://peltrenacional.operam.pro';
+  const headers = {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json',
+  };
+
+  const r = await fetch(
+    `${url}/api/v3/sales/customers?tax_id=${encodeURIComponent(rfc)}`,
+    { method: 'GET', headers }
+  );
+  const data = await r.json();
+
+  if (!data.total || data.total === 0 || !data.data || data.data.length === 0) {
+    return { encontrado: false };
+  }
+
+  const c = data.data[0];
+  const branch = (c.branches && c.branches.length > 0) ? c.branches[0] : {};
+
+  return {
+    encontrado: true,
+    cliente_id: c.customer_id,
+    CustName: c.CustName || '',
+    tax_id: c.tax_id || '',
+    street: c.street || '',
+    street_number: c.street_number || '',
+    suite_number: c.suite_number || '',
+    district: c.district || '',
+    postal_code: c.postal_code || '',
+    city: c.city || '',
+    state: c.state || '',
+    cfdi_regimen_fiscal: c.cfdi_regimen_fiscal || '',
+    branch: {
+      br_name: branch.br_name || '',
+      addr_street: branch.addr_street || '',
+      addr_colony: branch.addr_colony || '',
+      addr_zip: branch.addr_zip || '',
+      addr_city: branch.addr_city || '',
+      addr_state: branch.addr_state || '',
+      phone: branch.phone || '',
+      email: branch.email || '',
+    },
+  };
+}
+
 async function postCrearClienteHandler(cliente, deps) {
   const { crearClienteEnOperam, editarBranch: _editarBranch, agregarContactoFactura: _agregarContactoFactura, getToken, logCliente, subirCsfDropbox } = deps;
 
@@ -185,4 +231,4 @@ async function postCrearClienteHandler(cliente, deps) {
   return { ok: true, ...resultado };
 }
 
-module.exports = { toTitleCase, editarBranch, agregarContactoFactura, postCrearClienteHandler, getConfigPorPais, buildClienteBody };
+module.exports = { toTitleCase, editarBranch, agregarContactoFactura, postCrearClienteHandler, getConfigPorPais, buildClienteBody, buscarClientePorRFC };
