@@ -155,3 +155,47 @@ test('Card entrega: aparece ANTES de "Contacto y vendedor"', () => {
     'El card de entrega debe aparecer ANTES del card "Contacto y vendedor"'
   );
 });
+
+// --- Issue #6 Iteracion 3: Panel de confirmacion ---------------------------------
+
+test('csf-upload.html: existe div#panelConfirmacion', () => {
+  assert.ok(
+    html.includes('id="panelConfirmacion"'),
+    'debe existir elemento con id="panelConfirmacion"'
+  );
+});
+
+test('csf-upload.html: existe boton id="btnConfirmar"', () => {
+  assert.ok(
+    html.includes('id="btnConfirmar"'),
+    'debe existir boton con id="btnConfirmar"'
+  );
+});
+
+test('csf-upload.html: existe boton id="btnCancelarConfirmacion"', () => {
+  assert.ok(
+    html.includes('id="btnCancelarConfirmacion"'),
+    'debe existir boton con id="btnCancelarConfirmacion"'
+  );
+});
+
+test('csf-upload.html: panel de confirmacion tiene texto "Se van a modificar los datos del cliente en Operam"', () => {
+  assert.ok(
+    html.includes('Se van a modificar los datos del cliente en Operam'),
+    'el panel debe tener el mensaje de confirmacion requerido'
+  );
+});
+
+test('csf-upload.html: existe div#listaCambios para mostrar campos modificados', () => {
+  assert.ok(
+    html.includes('id="listaCambios"'),
+    'debe existir elemento con id="listaCambios" para listar los campos'
+  );
+});
+
+test('csf-upload.html: tiene API_ACTUALIZAR con ruta /api/actualizar-cliente', () => {
+  assert.ok(
+    html.includes('/api/actualizar-cliente'),
+    'debe tener la constante o referencia a /api/actualizar-cliente'
+  );
+});

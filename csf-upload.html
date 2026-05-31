@@ -346,6 +346,16 @@
       </div>
     </div>
 
+    <!-- Panel de confirmacion de cambios -->
+    <div id="panelConfirmacion" class="hidden" style="background:#fff3cd;border:1px solid #ffc107;border-radius:10px;padding:16px;margin-bottom:16px;">
+      <p style="font-weight:600;margin-bottom:10px;">Se van a modificar los datos del cliente en Operam</p>
+      <div id="listaCambios" style="font-size:13px;line-height:1.7;margin-bottom:14px;"></div>
+      <div style="display:flex;gap:10px;">
+        <button id="btnConfirmar" class="btn btn-primary" style="flex:1;" onclick="confirmarCambios()">Confirmar cambios</button>
+        <button id="btnCancelarConfirmacion" class="btn btn-reset" style="flex:1;" onclick="cancelarConfirmacion()">Cancelar</button>
+      </div>
+    </div>
+
     <!-- Status inferior (arriba del botón) -->
     <div class="status" id="statusBottom"></div>
 
@@ -394,6 +404,7 @@ const API_BASE        = 'https://operam-server.onrender.com';
 const API_URL         = `${API_BASE}/api/crear-cliente`;
 const API_QR          = `${API_BASE}/api/csf-from-url`;
 const API_BUSCAR      = `${API_BASE}/api/buscar-cliente`;
+const API_ACTUALIZAR  = `${API_BASE}/api/actualizar-cliente`;
 
 // ─── Mapa de regímenes ────────────────────────────────────────────────────────
 const REGIMENES = {
